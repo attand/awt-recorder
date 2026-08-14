@@ -77,6 +77,17 @@ body {
   align-items: center;
 }
 .awt-preview-title { font-size: 11px; font-weight: 600; color: #94a3b8; }
+.awt-preview-tag {
+  background: rgba(2, 224, 110, 0.15);
+  color: #02e06e;
+  border: 1px solid rgba(2, 224, 110, 0.4);
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
 .awt-preview-primary {
   font-family: monospace;
   font-size: 11px;
@@ -179,7 +190,7 @@ body {
 .awt-step-btn--del:hover { color: var(--danger-color); }
 
 .awt-step-meta { font-size: 10px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 3px; }
-.awt-tag { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+.awt-tag { background: #f1f5f9; color: #334155; padding: 1px 5px; border-radius: 3px; font-weight: 500; }
 
 /* 行内可编辑值输入框 */
 .awt-inline-input {
