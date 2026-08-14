@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWT 录制助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="awt-popup">
+    <div class="awt-header">
+      <h2 class="awt-title">AWT 录制助手</h2>
+      <span id="bridge-status" class="awt-badge awt-badge--off">Bridge 待检测</span>
+    </div>
+
+    <div class="awt-stats">
+      <div class="awt-stat-item">
+        <span class="awt-stat-label">已录制步骤</span>
+        <span id="step-count" class="awt-stat-value">0</span>
+      </div>
+    </div>
+
+    <div class="awt-actions">
+      <button id="toggle-record-btn" class="awt-btn awt-btn--primary">
+        <span class="awt-dot"></span>
+        <span id="record-btn-text">开始录制</span>
+      </button>
+      <button id="send-btn" class="awt-btn awt-btn--success" disabled>发送转译</button>
+      <button id="clear-btn" class="awt-btn awt-btn--secondary" disabled>清空</button>
+    </div>
+
+    <div id="status-message" class="awt-message"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

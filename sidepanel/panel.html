@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWT 录制控制面板</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="awt-panel">
+    <!-- 顶部状态栏 -->
+    <header class="awt-header">
+      <div class="awt-header__brand">
+        <img src="../icons/icon48.png" alt="logo" width="18" height="18" style="border-radius: 4px;">
+        <h1 class="awt-title">AWT 录制助手</h1>
+      </div>
+      <div class="awt-header__actions">
+        <span id="bridge-badge" class="awt-badge awt-badge--off" title="点击尝试重连">Bridge 离线</span>
+        <button id="open-settings-btn" class="awt-icon-btn" title="打开设置">⚙️</button>
+      </div>
+    </header>
+
+    <!-- 实时悬停定位器预览卡片 -->
+    <section id="locator-preview-card" class="awt-preview-card">
+      <div class="awt-preview-header">
+        <span class="awt-preview-title">🎯 实时定位器探测</span>
+        <span id="preview-tag-name" class="awt-tag">READY</span>
+      </div>
+      <div id="preview-locator-primary" class="awt-preview-primary">悬停页面元素以实时预览定位器...</div>
+      <div id="preview-locator-alts" class="awt-preview-alts"></div>
+    </section>
+
+    <!-- 录制控制主控区 -->
+    <section class="awt-controls">
+      <button id="toggle-record-btn" class="awt-btn awt-btn--primary awt-btn--lg">
+        <span class="awt-record-dot"></span>
+        <span id="record-btn-text">开始录制</span>
+      </button>
+      <div class="awt-control-row">
+        <button id="send-btn" class="awt-btn awt-btn--success" disabled>🚀 发送转译</button>
+        <button id="copy-clipboard-btn" class="awt-btn awt-btn--secondary" disabled>📋 复制 JSON</button>
+        <button id="clear-btn" class="awt-btn awt-btn--secondary" disabled>🗑️</button>
+      </div>
+    </section>
+
+    <!-- 步骤列表容器 -->
+    <section class="awt-steps-section">
+      <div class="awt-steps-header">
+        <h2 class="awt-section-title">录制操作流 (<span id="step-count">0</span>)</h2>
+        <button id="export-json-btn" class="awt-text-btn" disabled>导出文件</button>
+      </div>
+
+      <div id="steps-container" class="awt-steps-list">
+        <div class="awt-empty-state">
+          <div class="awt-empty-icon">📝</div>
+          <p>暂无录制步骤</p>
+          <p class="awt-empty-sub">开启录制并在页面操作，支持双击编辑意图/值</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部状态消息 -->
+    <footer class="awt-footer">
+      <div id="status-message" class="awt-status-msg">准备就绪</div>
+    </footer>
+
+    <!-- 全局 Toast 提示 -->
+    <div id="awt-toast" class="awt-toast"></div>
+  </div>
+
+  <script src="../config/default_config.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>

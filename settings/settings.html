@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWT 录制助手 — 配置中心</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="settings-container">
+    <header class="settings-header">
+      <h1>⚙️ AWT 录制助手配置中心</h1>
+      <p class="settings-subtitle">管理框架连接、预设配置与 UI 组件识别规则</p>
+    </header>
+
+    <main class="settings-body">
+      <!-- 预设选择与管理 -->
+      <section class="settings-card">
+        <h2 class="card-title">📁 项目预设 (Presets)</h2>
+        <div class="form-group">
+          <label for="preset-select">当前激活预设</label>
+          <select id="preset-select" class="form-control"></select>
+        </div>
+      </section>
+
+      <!-- 连接配置 -->
+      <section class="settings-card">
+        <h2 class="card-title">🔌 Bridge 连接配置</h2>
+        <div class="form-group">
+          <label for="bridge-url">WebSocket 服务地址</label>
+          <input type="text" id="bridge-url" class="form-control" placeholder="ws://127.0.0.1:8766">
+        </div>
+        <div class="form-group">
+          <label for="http-fallback-url">HTTP 降级地址</label>
+          <input type="text" id="http-fallback-url" class="form-control" placeholder="http://127.0.0.1:8766">
+        </div>
+      </section>
+
+      <!-- 框架与属性配置 -->
+      <section class="settings-card">
+        <h2 class="card-title">🧩 UI 框架与定位器</h2>
+        <div class="form-group">
+          <label for="ui-framework">UI 框架适配器</label>
+          <select id="ui-framework" class="form-control">
+            <option value="element-ui">Element UI / Element Plus</option>
+            <option value="ant-design">Ant Design (React/Vue)</option>
+            <option value="generic">通用原生 HTML</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="testid-attr">TestID 属性名</label>
+          <input type="text" id="testid-attr" class="form-control" placeholder="data-testid">
+        </div>
+        <div class="form-group">
+          <label for="testid-prefix">TestID 前缀过滤 (如 vue, 留空表示不过滤)</label>
+          <input type="text" id="testid-prefix" class="form-control" placeholder="vue">
+        </div>
+      </section>
+
+      <div class="settings-footer">
+        <button id="save-btn" class="btn btn-primary">保存所有配置</button>
+        <span id="save-tip" class="save-tip"></span>
+      </div>
+    </main>
+  </div>
+  <script src="../config/default_config.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

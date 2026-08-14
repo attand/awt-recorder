@@ -1,0 +1,219 @@
+:root {
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --danger-color: #ef4444;
+  --danger-hover: #dc2626;
+  --success-color: #10b981;
+  --success-hover: #059669;
+  --bg-main: #f8fafc;
+  --bg-card: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.awt-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
+}
+
+.awt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+.awt-header__brand { display: flex; align-items: center; gap: 6px; }
+.awt-title { font-size: 14px; font-weight: 700; }
+.awt-header__actions { display: flex; align-items: center; gap: 6px; }
+
+.awt-icon-btn {
+  background: none;
+  border: none;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+}
+.awt-icon-btn:hover { background-color: var(--border-color); }
+
+.awt-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.awt-badge--on { background-color: #dcfce7; color: #15803d; }
+.awt-badge--off { background-color: #fee2e2; color: #b91c1c; }
+
+/* 实时定位器预览卡片 */
+.awt-preview-card {
+  background: #1e293b;
+  color: #f8fafc;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.awt-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.awt-preview-title { font-size: 11px; font-weight: 600; color: #94a3b8; }
+.awt-preview-primary {
+  font-family: monospace;
+  font-size: 11px;
+  color: #38bdf8;
+  word-break: break-all;
+  background: #0f172a;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.awt-preview-alts {
+  font-family: monospace;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.awt-controls { display: flex; flex-direction: column; gap: 6px; }
+.awt-control-row { display: flex; gap: 6px; }
+
+.awt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 6px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.awt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.awt-btn--lg { padding: 9px 14px; font-size: 13px; }
+.awt-btn--primary { background-color: var(--primary-color); color: #fff; }
+.awt-btn--primary:hover:not(:disabled) { background-color: var(--primary-hover); }
+.awt-btn--recording { background-color: var(--danger-color); color: #fff; animation: pulse 2s infinite; }
+.awt-btn--success { background-color: var(--success-color); color: #fff; flex: 2; }
+.awt-btn--secondary { background-color: var(--border-color); color: var(--text-main); }
+
+.awt-record-dot { width: 8px; height: 8px; border-radius: 50%; background-color: #fff; }
+
+.awt-steps-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+}
+.awt-steps-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.awt-section-title { font-size: 12px; font-weight: 600; }
+.awt-text-btn { background: none; border: none; font-size: 11px; color: var(--primary-color); cursor: pointer; }
+.awt-text-btn:disabled { color: var(--text-muted); cursor: not-allowed; }
+
+.awt-steps-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.awt-step-card {
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: border-color 0.2s;
+}
+.awt-step-card:hover { border-color: #94a3b8; }
+
+.awt-step-main { display: flex; align-items: center; justify-content: space-between; }
+.awt-step-action { font-weight: 700; padding: 1px 4px; border-radius: 3px; font-size: 9px; }
+.awt-step-action--click { background: #e0e7ff; color: #3730a3; }
+.awt-step-action--fill { background: #fef3c7; color: #92400e; }
+.awt-step-action--select_option { background: #dcfce7; color: #166534; }
+.awt-step-action--press { background: #f3e8ff; color: #6b21a8; }
+
+.awt-step-intent-text {
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+  margin: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.awt-step-intent-text:hover { text-decoration: underline; }
+
+.awt-step-btns { display: flex; gap: 2px; }
+.awt-step-btn { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 11px; padding: 1px 3px; }
+.awt-step-btn:hover { color: var(--text-main); }
+.awt-step-btn--del:hover { color: var(--danger-color); }
+
+.awt-step-meta { font-size: 10px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 3px; }
+.awt-tag { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+
+/* 行内可编辑值输入框 */
+.awt-inline-input {
+  font-size: 11px;
+  padding: 2px 4px;
+  border: 1px solid var(--primary-color);
+  border-radius: 3px;
+  outline: none;
+  width: 100%;
+}
+
+.awt-empty-state { margin: auto; text-align: center; color: var(--text-muted); font-size: 11px; }
+.awt-empty-icon { font-size: 24px; margin-bottom: 4px; }
+.awt-empty-sub { font-size: 10px; color: #94a3b8; }
+
+.awt-footer { padding-top: 4px; border-top: 1px solid var(--border-color); }
+.awt-status-msg { font-size: 10px; color: var(--text-muted); text-align: center; }
+
+/* Toast 提示浮层 */
+.awt-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.9);
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 11px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 9999;
+}
+.awt-toast--visible { opacity: 1; }
+
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.85; } 100% { opacity: 1; } }

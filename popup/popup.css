@@ -1,0 +1,139 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: #f8fafc;
+  color: #1e293b;
+  width: 260px;
+}
+
+.awt-popup {
+  padding: 16px;
+}
+
+.awt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.awt-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.awt-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: #e2e8f0;
+  color: #64748b;
+}
+
+.awt-badge--on {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.awt-badge--off {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.awt-stats {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.awt-stat-label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.awt-stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #2563eb;
+}
+
+.awt-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.awt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.awt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.awt-btn--primary {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+.awt-btn--primary:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+.awt-btn--recording {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+.awt-btn--recording:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.awt-btn--success {
+  background-color: #16a34a;
+  color: #ffffff;
+}
+.awt-btn--success:hover:not(:disabled) {
+  background-color: #15803d;
+}
+
+.awt-btn--secondary {
+  background-color: #e2e8f0;
+  color: #475569;
+}
+.awt-btn--secondary:hover:not(:disabled) {
+  background-color: #cbd5e1;
+}
+
+.awt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ffffff;
+}
+
+.awt-message {
+  margin-top: 10px;
+  font-size: 12px;
+  text-align: center;
+  min-height: 16px;
+  color: #64748b;
+}
