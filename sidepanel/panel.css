@@ -268,6 +268,7 @@ body {
 .awt-health-item--ok { border-left: 3px solid #10b981; }
 .awt-health-item--fail { border-left: 3px solid #ef4444; background-color: #fef2f2; }
 .awt-health-item--healing { border-left: 3px solid #f59e0b; background-color: #fffbeb; }
+.awt-health-item--skip { border-left: 3px solid #eab308; background-color: #fefce8; }
 .awt-health-item__header {
   display: flex;
   justify-content: space-between;
@@ -283,6 +284,7 @@ body {
 .awt-health-status--ok { background: #dcfce7; color: #15803d; }
 .awt-health-status--fail { background: #fee2e2; color: #b91c1c; }
 .awt-health-status--healed { background: #fef3c7; color: #92400e; }
+.awt-health-status--skip { background: #fef9c3; color: #854d0e; }
 .awt-health-item__locator {
   font-family: monospace;
   font-size: 10px;

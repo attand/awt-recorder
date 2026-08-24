@@ -29,6 +29,18 @@
       const loc = item.locator;
       let found = false;
 
+      // 动态变量插值 (如 tr:has-text('{{ bill_id }}') 或 ${var})：直接跳过检测，不做失效判断
+      if (loc && (loc.includes('{{') || loc.includes('${'))) {
+        results.push({
+          index: item.index,
+          locator: item.locator,
+          intent: item.intent,
+          status: 'dynamic_skipped',
+          dom_snippet: ''
+        });
+        continue;
+      }
+
       try {
         // 处理 Playwright 风格的文本选择器
         if (loc.startsWith("text=") || loc.startsWith("text='") || loc.startsWith('text="')) {

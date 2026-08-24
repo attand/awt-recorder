@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const exploreProgress = document.getElementById('explore-progress');
 
   let isExploring = false;
+  let lastRenderedStepNum = -1;
 
 
   function showToast(msg) {
@@ -320,10 +321,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     else if (msg.type === 'HEAL_RESULT') {
       handleHealResult(msg);
     } else if (msg.type === 'APPLY_RESULT') {
+      healthApplyBtn.disabled = false;
       if (msg.success) {
+        healthApplyBtn.textContent = '✅ 修复已采纳写入';
         showToast('✅ 修复已写入 YAML 文件');
         statusMsg.style.color = '#10b981';
-        statusMsg.textContent = '修复已成功写入 YAML';
+        statusMsg.textContent = '修复已成功写入: ' + (msg.message || '');
       } else {
         showToast('❌ 写入失败: ' + (msg.message || ''));
         statusMsg.style.color = '#ef4444';
@@ -372,6 +375,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       }
 
+      // 重置状态
+      healSuggestions = [];
+      healthActions.style.display = 'none';
+      healthApplyBtn.disabled = false;
+      healthApplyBtn.textContent = '✅ 采纳全部修复';
+      healthResults.innerHTML = '';
+      healthSection.style.display = 'none';
+
       healthCheckBtn.disabled = importedYamlSteps.length === 0;
       showToast(`📂 已导入 ${importedYamlSteps.length} 个可检测步骤`);
       statusMsg.textContent = `已导入 ${file.name}（${importedYamlSteps.length} 个定位器）`;
@@ -388,6 +399,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     healthCheckBtn.disabled = true;
     statusMsg.textContent = '🩺 正在验证定位器...';
     healSuggestions = [];
+    healthActions.style.display = 'none';
+    healthApplyBtn.disabled = false;
+    healthApplyBtn.textContent = '✅ 采纳全部修复';
 
     // 向 Service Worker 发送健检请求
     chrome.runtime.sendMessage({
@@ -423,22 +437,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     healthFileInfo.textContent = `脚本: ${importedYamlPath}`;
     healthResults.innerHTML = '';
     healthActions.style.display = 'none';
+    healthApplyBtn.disabled = false;
+    healthApplyBtn.textContent = '✅ 采纳全部修复';
 
     const items = res.results || [];
     let okCount = 0;
+    let skipCount = 0;
     let failCount = 0;
 
     for (const item of items) {
       const div = document.createElement('div');
+      const isDynamic = item.status === 'dynamic_skipped';
       const isOk = item.status === 'found';
-      if (isOk) okCount++; else failCount++;
 
-      div.className = `awt-health-item ${isOk ? 'awt-health-item--ok' : 'awt-health-item--fail'}`;
+      let statusBadge = '🟢 命中';
+      let statusClass = 'awt-health-status--ok';
+      let itemClass = 'awt-health-item--ok';
+
+      if (isDynamic) {
+        skipCount++;
+        statusBadge = '🟡 动态跳过';
+        statusClass = 'awt-health-status--skip';
+        itemClass = 'awt-health-item--skip';
+      } else if (isOk) {
+        okCount++;
+      } else {
+        failCount++;
+        statusBadge = '🔴 失效';
+        statusClass = 'awt-health-status--fail';
+        itemClass = 'awt-health-item--fail';
+      }
+
+      div.className = `awt-health-item ${itemClass}`;
       div.setAttribute('data-index', item.index);
       div.innerHTML = `
         <div class="awt-health-item__header">
           <span class="awt-health-item__intent">#${item.index + 1} ${item.intent}</span>
-          <span class="awt-health-status ${isOk ? 'awt-health-status--ok' : 'awt-health-status--fail'}">${isOk ? '🟢 命中' : '🔴 失效'}</span>
+          <span class="awt-health-status ${statusClass}">${statusBadge}</span>
         </div>
         <div class="awt-health-item__locator">${item.locator}</div>
       `;
@@ -448,10 +483,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 摘要
     const summary = document.createElement('div');
     summary.className = 'awt-health-summary';
-    summary.textContent = `验证完成: 🟢 ${okCount} 命中 / 🔴 ${failCount} 失效`;
+    const parts = [`🟢 ${okCount} 命中`];
+    if (skipCount > 0) parts.push(`🟡 ${skipCount} 动态跳过`);
+    parts.push(`🔴 ${failCount} 失效`);
+    summary.textContent = `验证完成: ${parts.join(' / ')}`;
     healthResults.prepend(summary);
 
-    statusMsg.textContent = `健检完成: ${okCount} 通过, ${failCount} 失效`;
+    statusMsg.textContent = `健检完成: ${okCount} 通过, ${skipCount > 0 ? skipCount + ' 跳过, ' : ''}${failCount} 失效`;
 
     // 如果有失效项，自动请求 AI 修复
     if (failCount > 0) {
@@ -507,6 +545,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (healSuggestions.length > 0) {
       healthActions.style.display = '';
+      healthApplyBtn.disabled = false;
+      healthApplyBtn.textContent = '✅ 采纳全部修复';
       statusMsg.textContent = `AI 给出 ${healSuggestions.length} 个修复建议，请审核后采纳`;
       showToast(`🔧 AI 给出 ${healSuggestions.length} 个修复建议`);
     } else {
@@ -603,6 +643,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!intent) return;
 
     isExploring = true;
+    lastRenderedStepNum = -1;
     exploreStartBtn.disabled = true;
     exploreStopBtn.disabled = false;
     exploreProgress.innerHTML = '';
@@ -623,6 +664,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   function renderExploreStep(msg) {
+    // 严格防重：如果同一步骤已经渲染过，跳过
+    if (typeof msg.step_num === 'number' && msg.step_num === lastRenderedStepNum) {
+      return;
+    }
+    lastRenderedStepNum = msg.step_num;
+
     const div = document.createElement('div');
     div.className = 'awt-explore-step';
     div.innerHTML = `

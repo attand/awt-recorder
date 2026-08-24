@@ -354,15 +354,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  // Phase 4b: 探索进度 — 从 Content Script 转发到 Side Panel
+  // Phase 4b: 探索进度 — panel.js 已通过 content script 直接接收，无需 service_worker 二次转发（避免重复渲染）
   if (msg.type === 'EXPLORE_STEP_PROGRESS') {
-    notifySidePanel(msg);
     return false;
   }
 
-  // Phase 4b: 探索完成 — 转发到 Side Panel，并自动通知 Bridge 将步骤固化为 YAML 组件
+  // Phase 4b: 探索完成 — 自动通知 Bridge 将步骤固化为 YAML 组件（panel.js 已直接接收 complete 消息）
   if (msg.type === 'EXPLORE_COMPLETE') {
-    notifySidePanel(msg);
     if (msg.success && msg.generatedSteps && msg.generatedSteps.length > 0) {
       sendToBridge({
         type: 'EXPLORE_SOLIDIFY_REQUEST',
