@@ -1,13 +1,13 @@
 /**
  * awt-recorder/content/explorer_agent.js
- * Phase 4b: 前端 AI 探索引擎
+ * Phase 4b: 前端 AI 探索引擎 (支持防重拦截与步骤自动收集)
  *
  * 职责：
  *   1. 生成当前页面的极简 DOM 快照（移植自 Python 端 DOMSimplifier）
  *   2. 将快照 + 意图 + 历史发送给后端 LLM
  *   3. 解析 LLM 返回的动作指令，在真实 DOM 上执行
  *   4. 将每步操作通过 RECORDED_EVENT 追加到录制列表
- *   5. 循环直到 LLM 返回 done 或达到 max_steps
+ *   5. 循环直到 LLM 返回 done 或达到 max_steps，并将生成的步骤打包传回 Bridge 自动固化为 YAML 组件
  */
 (function () {
 
@@ -16,11 +16,16 @@
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'BEGIN_EXPLORE') {
+      // 核心防重保护：只在顶层窗口运行探索主循环，禁止子 iframe 重复执行
+      if (window.self !== window.top) {
+        return false;
+      }
       if (isExploring) {
         sendResponse({ status: 'already_exploring' });
         return true;
       }
       isExploring = true;
+      window.__AWT_IS_EXPLORING = true;
       exploreAborted = false;
       runExploreLoop(msg.intent_text, msg.max_steps || 10);
       sendResponse({ status: 'explore_started' });
@@ -138,7 +143,7 @@
   }
 
   /**
-   * 将探索操作转为 recorder.js 兼容的 RECORDED_EVENT 并发送
+   * 将探索操作转为 recorder.js 兼容的 RECORDED_EVENT 并发送，同时返回清理后的步骤数据
    */
   function emitRecordedStep(el, actionType, value, thinkText) {
     // 复用 dom_utils.js 中已有的函数（它们在同一个 Content Script 上下文中）
@@ -155,6 +160,13 @@
       else if (actionType === 'fill') intent = '填写' + (cleanText ? '「' + cleanText + '」' : el.tagName);
     }
     intent = '【AI探索】' + intent;
+
+    const stepPayload = {
+      action: actionType,
+      intent: intent,
+      value: value || null,
+      locator: locatorInfo.primary
+    };
 
     const payload = {
       type: 'RECORDED_EVENT',
@@ -183,6 +195,8 @@
     try {
       chrome.runtime.sendMessage(payload).catch(() => {});
     } catch (e) {}
+
+    return stepPayload;
   }
 
   /**
@@ -207,6 +221,7 @@
    */
   async function runExploreLoop(intentText, maxSteps) {
     const history = [];
+    const generatedStepsForExport = [];
 
     // 通知进度
     function reportProgress(stepNum, thinkText, actionType, ref) {
@@ -225,7 +240,13 @@
     try {
       for (let step = 1; step <= maxSteps; step++) {
         if (exploreAborted) {
-          chrome.runtime.sendMessage({ type: 'EXPLORE_COMPLETE', success: false, reason: 'aborted' }).catch(() => {});
+          chrome.runtime.sendMessage({
+            type: 'EXPLORE_COMPLETE',
+            success: false,
+            reason: 'aborted',
+            intent: intentText,
+            generatedSteps: generatedStepsForExport
+          }).catch(() => {});
           break;
         }
 
@@ -261,7 +282,13 @@
 
         // 4. 执行动作
         if (action === 'done') {
-          chrome.runtime.sendMessage({ type: 'EXPLORE_COMPLETE', success: true, reason: think }).catch(() => {});
+          chrome.runtime.sendMessage({
+            type: 'EXPLORE_COMPLETE',
+            success: true,
+            reason: think || '意图已达成',
+            intent: intentText,
+            generatedSteps: generatedStepsForExport
+          }).catch(() => {});
           break;
         }
 
@@ -272,18 +299,34 @@
         }
 
         executeAction(targetEl, action, value);
-        emitRecordedStep(targetEl, action, value, think);
+        const recordedStep = emitRecordedStep(targetEl, action, value, think);
+        if (recordedStep) {
+          generatedStepsForExport.push(recordedStep);
+        }
         history.push({ step: step, action: action, ref: ref, value: value || undefined });
 
         // 如果是最后一步还没 done
         if (step === maxSteps) {
-          chrome.runtime.sendMessage({ type: 'EXPLORE_COMPLETE', success: false, reason: 'max_steps_reached' }).catch(() => {});
+          chrome.runtime.sendMessage({
+            type: 'EXPLORE_COMPLETE',
+            success: false,
+            reason: 'max_steps_reached',
+            intent: intentText,
+            generatedSteps: generatedStepsForExport
+          }).catch(() => {});
         }
       }
     } catch (e) {
-      chrome.runtime.sendMessage({ type: 'EXPLORE_COMPLETE', success: false, reason: e.message }).catch(() => {});
+      chrome.runtime.sendMessage({
+        type: 'EXPLORE_COMPLETE',
+        success: false,
+        reason: e.message,
+        intent: intentText,
+        generatedSteps: generatedStepsForExport
+      }).catch(() => {});
     } finally {
       isExploring = false;
+      window.__AWT_IS_EXPLORING = false;
       // 清除 awt-explore-id 属性
       document.querySelectorAll('[awt-explore-id]').forEach(el => el.removeAttribute('awt-explore-id'));
     }

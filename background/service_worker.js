@@ -122,6 +122,15 @@ async function initWebSocket() {
             think: msg.think
           });
         }
+        if (msg.type === 'EXPLORE_SOLIDIFIED') {
+          notifySidePanel({
+            type: 'EXPLORE_SOLIDIFIED',
+            success: msg.success,
+            yamlPath: msg.yamlPath,
+            componentName: msg.componentName,
+            totalSteps: msg.totalSteps
+          });
+        }
       } catch (e) {
         console.warn('[AWT SW] 解析 WS 消息异常:', e);
       }
@@ -314,12 +323,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  // Phase 4b: 探索开始 — 转发到 Content Script
+  // Phase 4b: 探索开始 — 仅发送给当前激活 Tab 的顶层窗口，防止多 Frame 并发重复执行
   if (msg.type === 'EXPLORE_START') {
-    broadcastToTabs({
-      type: 'BEGIN_EXPLORE',
-      intent_text: msg.intent_text,
-      max_steps: msg.max_steps || 10
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, {
+          type: 'BEGIN_EXPLORE',
+          intent_text: msg.intent_text,
+          max_steps: msg.max_steps || 10
+        }).catch(() => {});
+      }
     });
     return false;
   }
@@ -341,9 +354,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  // Phase 4b: 探索进度和完成 — 从 Content Script 转发到 Side Panel
-  if (msg.type === 'EXPLORE_STEP_PROGRESS' || msg.type === 'EXPLORE_COMPLETE') {
+  // Phase 4b: 探索进度 — 从 Content Script 转发到 Side Panel
+  if (msg.type === 'EXPLORE_STEP_PROGRESS') {
     notifySidePanel(msg);
+    return false;
+  }
+
+  // Phase 4b: 探索完成 — 转发到 Side Panel，并自动通知 Bridge 将步骤固化为 YAML 组件
+  if (msg.type === 'EXPLORE_COMPLETE') {
+    notifySidePanel(msg);
+    if (msg.success && msg.generatedSteps && msg.generatedSteps.length > 0) {
+      sendToBridge({
+        type: 'EXPLORE_SOLIDIFY_REQUEST',
+        intent: msg.intent || 'ai_explore',
+        steps: msg.generatedSteps
+      });
+    }
     return false;
   }
 

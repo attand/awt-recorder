@@ -107,7 +107,7 @@
   }
 
   function handleMouseOver(e) {
-    if (!isRecording) return;
+    if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
 
@@ -194,7 +194,7 @@
   }
 
   function handleClick(e) {
-    if (!isRecording) return;
+    if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
 
@@ -213,7 +213,7 @@
   }
 
   function handleInput(e) {
-    if (!isRecording) return;
+    if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
 
@@ -232,7 +232,7 @@
   }
 
   function handleChange(e) {
-    if (!isRecording) return;
+    if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
 
@@ -245,7 +245,7 @@
   }
 
   function handleKeyDown(e) {
-    if (!isRecording) return;
+    if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
 

@@ -335,6 +335,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderExploreStep(msg);
     } else if (msg.type === 'EXPLORE_COMPLETE') {
       handleExploreComplete(msg);
+    } else if (msg.type === 'EXPLORE_SOLIDIFIED') {
+      handleExploreSolidified(msg);
     }
   });
 
@@ -649,6 +651,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (res) updateUI(res);
     });
   }
+
+  function handleExploreSolidified(msg) {
+    if (msg.success) {
+      const div = document.createElement('div');
+      div.className = 'awt-explore-step awt-explore-step--done';
+      div.innerHTML = `<div class="awt-explore-step__action">💾 步骤已自动固化为 YAML 组件: <b>${msg.componentName}</b> (${msg.totalSteps} 步)</div>`;
+      exploreProgress.appendChild(div);
+      exploreProgress.scrollTop = exploreProgress.scrollHeight;
+      showToast(`🎉 已固化为组件: ${msg.componentName}`);
+      statusMsg.textContent = `已固化为 YAML 组件: ${msg.componentName}`;
+    }
+  }
 });
+
 
 
