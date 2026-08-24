@@ -1,13 +1,6 @@
 /**
  * awt-recorder/content/explorer_agent.js
- * Phase 4b: 前端 AI 探索引擎 (支持防重拦截与步骤自动收集)
- *
- * 职责：
- *   1. 生成当前页面的极简 DOM 快照（移植自 Python 端 DOMSimplifier）
- *   2. 将快照 + 意图 + 历史发送给后端 LLM
- *   3. 解析 LLM 返回的动作指令，在真实 DOM 上执行
- *   4. 将每步操作通过 RECORDED_EVENT 追加到录制列表
- *   5. 循环直到 LLM 返回 done 或达到 max_steps，并将生成的步骤打包传回 Bridge 自动固化为 YAML 组件
+ * Phase 4b: 前端 AI 探索引擎 (支持跨 iframe 元素识别、防重拦截与步骤自动固化)
  */
 (function () {
 
@@ -16,7 +9,7 @@
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'BEGIN_EXPLORE') {
-      // 核心防重保护：只在顶层窗口运行探索主循环，禁止子 iframe 重复执行
+      // 只在顶层窗口运行探索主循环，子 iframe 不单独启动循环
       if (window.self !== window.top) {
         return false;
       }
@@ -39,7 +32,7 @@
     }
 
     if (msg.type === 'EXPLORE_LLM_RESPONSE') {
-      // LLM 响应通过事件传递给 runExploreLoop 中的等待逻辑
+      // LLM 响应通过全局 Promise 回调传递给 runExploreLoop
       if (window.__awt_explore_resolve) {
         window.__awt_explore_resolve(msg);
         window.__awt_explore_resolve = null;
@@ -49,11 +42,7 @@
   });
 
   /**
-   * 生成极简 DOM 快照（移植自 Python DOMSimplifier._build_extraction_js）
-   * 返回格式：
-   *   --- Page ---
-   *   e1  [button]  "登录系统"
-   *   e2  [input]   placeholder="请输入员工账号"
+   * 生成极简 DOM 快照（支持主页面及所有子 iframe）
    */
   function snapshot() {
     const refMap = {};
@@ -68,74 +57,135 @@
 
     const seenTexts = new Set();
 
-    outputLines.push('--- Page ---');
+    function collectFromDoc(doc, label) {
+      if (!doc) return;
+      let elements;
+      try {
+        elements = doc.querySelectorAll(INTERACTIVE);
+      } catch (e) {
+        return;
+      }
+      if (!elements || elements.length === 0) return;
 
-    document.querySelectorAll(INTERACTIVE).forEach(el => {
-      const rect = el.getBoundingClientRect();
-      const style = window.getComputedStyle(el);
+      outputLines.push(`--- ${label} ---`);
 
-      if (rect.width < 3 || rect.height < 3) return;
-      if (style.visibility === 'hidden' || style.display === 'none') return;
-      if (parseFloat(style.opacity) < 0.1) return;
+      elements.forEach(el => {
+        const rect = el.getBoundingClientRect();
+        const win = doc.defaultView || window;
+        const style = win.getComputedStyle ? win.getComputedStyle(el) : null;
 
-      const tag = el.tagName.toLowerCase();
-      if ((tag === 'span' || tag === 'label') &&
-          !el.getAttribute('onclick') &&
-          !el.getAttribute('role') &&
-          !el.getAttribute('tabindex')) return;
+        if (rect.width < 3 || rect.height < 3) return;
+        if (style && (style.visibility === 'hidden' || style.display === 'none')) return;
+        if (style && parseFloat(style.opacity) < 0.1) return;
 
-      const text = (el.innerText || '').trim().substring(0, 40).replace(/\n/g, ' ');
-      const name = el.getAttribute('name') || '';
-      const placeholder = el.getAttribute('placeholder') || '';
-      const ariaLabel = el.getAttribute('aria-label') || '';
-      const type = el.getAttribute('type') || '';
+        const tag = el.tagName.toLowerCase();
+        if ((tag === 'span' || tag === 'label') &&
+            !el.getAttribute('onclick') &&
+            !el.getAttribute('role') &&
+            !el.getAttribute('tabindex')) return;
 
-      const dedupKey = tag + ':' + (text || name || placeholder);
-      if (dedupKey.length > 2 && seenTexts.has(dedupKey)) return;
-      if (dedupKey.length > 2) seenTexts.add(dedupKey);
+        const text = (el.innerText || '').trim().substring(0, 40).replace(/\n/g, ' ');
+        const name = el.getAttribute('name') || '';
+        const placeholder = el.getAttribute('placeholder') || '';
+        const ariaLabel = el.getAttribute('aria-label') || '';
+        const type = el.getAttribute('type') || '';
 
-      if (!text && !name && !placeholder && !ariaLabel &&
-          tag !== 'input' && tag !== 'select' && tag !== 'textarea') return;
+        const dedupKey = tag + ':' + (text || name || placeholder);
+        if (dedupKey.length > 2 && seenTexts.has(dedupKey)) return;
+        if (dedupKey.length > 2) seenTexts.add(dedupKey);
 
-      counter++;
-      const ref = 'e' + counter;
-      el.setAttribute('awt-explore-id', ref);
-      refMap[ref] = el;
+        if (!text && !name && !placeholder && !ariaLabel &&
+            tag !== 'input' && tag !== 'select' && tag !== 'textarea') return;
 
-      // 格式化行
-      const parts = [ref.padEnd(4) + ' [' + tag + ']'];
-      if (text) parts.push('"' + text + '"');
-      if (name) parts.push('name="' + name + '"');
-      if (placeholder) parts.push('placeholder="' + placeholder + '"');
-      if (ariaLabel && !text) parts.push('aria-label="' + ariaLabel + '"');
-      if (type && tag === 'input') parts.splice(1, 0, 'type=' + type);
-      outputLines.push('  ' + parts.join('  '));
-    });
+        counter++;
+        const ref = 'e' + counter;
+        try {
+          el.setAttribute('awt-explore-id', ref);
+        } catch (e) {}
+        refMap[ref] = el;
+
+        // 格式化行
+        const parts = [ref.padEnd(4) + ' [' + tag + ']'];
+        if (text) parts.push('"' + text + '"');
+        if (name) parts.push('name="' + name + '"');
+        if (placeholder) parts.push('placeholder="' + placeholder + '"');
+        if (ariaLabel && !text) parts.push('aria-label="' + ariaLabel + '"');
+        if (type && tag === 'input') parts.splice(1, 0, 'type=' + type);
+        outputLines.push('  ' + parts.join('  '));
+      });
+    }
+
+    // 1. 采集主页面
+    collectFromDoc(document, 'Page');
+
+    // 2. 采集所有可访问的子 iframe
+    try {
+      const iframes = document.querySelectorAll('iframe, frame');
+      iframes.forEach((iframe, idx) => {
+        try {
+          const subDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (subDoc) {
+            collectFromDoc(subDoc, `iframe (${iframe.name || iframe.id || 'frame_' + (idx + 1)})`);
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
 
     return { text: outputLines.join('\n'), refMap: refMap };
   }
 
   /**
-   * 根据短引用解析出真实 DOM 元素
+   * 根据短引用解析出真实 DOM 元素（支持跨 iframe）
    */
   function resolveRef(refMap, ref) {
-    return refMap[ref] || document.querySelector('[awt-explore-id="' + ref + '"]');
+    if (refMap && refMap[ref]) return refMap[ref];
+    let el = document.querySelector('[awt-explore-id="' + ref + '"]');
+    if (el) return el;
+    try {
+      const iframes = document.querySelectorAll('iframe, frame');
+      for (const iframe of iframes) {
+        try {
+          const subDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (subDoc) {
+            el = subDoc.querySelector('[awt-explore-id="' + ref + '"]');
+            if (el) return el;
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+    return null;
   }
 
   /**
-   * 在真实 DOM 上执行操作并派发对应事件
+   * 清除页面及 iframe 中的 awt-explore-id 标记
+   */
+  function clearExploreIds() {
+    try {
+      document.querySelectorAll('[awt-explore-id]').forEach(el => el.removeAttribute('awt-explore-id'));
+      const iframes = document.querySelectorAll('iframe, frame');
+      iframes.forEach(iframe => {
+        try {
+          const subDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (subDoc) {
+            subDoc.querySelectorAll('[awt-explore-id]').forEach(el => el.removeAttribute('awt-explore-id'));
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  /**
+   * 在真实 DOM 上执行操作
    */
   function executeAction(el, actionType, value) {
     if (actionType === 'click') {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
       el.click();
     } else if (actionType === 'fill') {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
       el.focus();
-      // 清空现有值
       el.value = '';
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      // 填入新值
       el.value = value || '';
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -143,16 +193,15 @@
   }
 
   /**
-   * 将探索操作转为 recorder.js 兼容的 RECORDED_EVENT 并发送，同时返回清理后的步骤数据
+   * 将探索操作转为 recorder.js 兼容的 RECORDED_EVENT 并发送
    */
   function emitRecordedStep(el, actionType, value, thinkText) {
-    // 复用 dom_utils.js 中已有的函数（它们在同一个 Content Script 上下文中）
     const locatorInfo = (typeof generateSmartLocator === 'function')
       ? generateSmartLocator(el)
       : { primary: el.tagName.toLowerCase(), alternatives: [] };
 
     const cleanText = (el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 100);
-    const isIframe = window.self !== window.top;
+    const isIframe = window.self !== window.top || el.ownerDocument !== document;
 
     let intent = thinkText || '';
     if (!intent) {
@@ -200,7 +249,7 @@
   }
 
   /**
-   * 等待 LLM 响应（通过 Promise + 消息回调）
+   * 等待 LLM 响应
    */
   function waitForLLMResponse(timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -223,7 +272,6 @@
     const history = [];
     const generatedStepsForExport = [];
 
-    // 通知进度
     function reportProgress(stepNum, thinkText, actionType, ref) {
       try {
         chrome.runtime.sendMessage({
@@ -243,14 +291,14 @@
           chrome.runtime.sendMessage({
             type: 'EXPLORE_COMPLETE',
             success: false,
-            reason: 'aborted',
+            reason: '已手动终止探索',
             intent: intentText,
             generatedSteps: generatedStepsForExport
           }).catch(() => {});
           break;
         }
 
-        // 等待页面稳定
+        // 等待页面渲染稳定
         await new Promise(r => setTimeout(r, 800));
 
         // 1. 生成 DOM 快照
@@ -305,12 +353,11 @@
         }
         history.push({ step: step, action: action, ref: ref, value: value || undefined });
 
-        // 如果是最后一步还没 done
         if (step === maxSteps) {
           chrome.runtime.sendMessage({
             type: 'EXPLORE_COMPLETE',
             success: false,
-            reason: 'max_steps_reached',
+            reason: '已达到最大步数上限',
             intent: intentText,
             generatedSteps: generatedStepsForExport
           }).catch(() => {});
@@ -327,8 +374,7 @@
     } finally {
       isExploring = false;
       window.__AWT_IS_EXPLORING = false;
-      // 清除 awt-explore-id 属性
-      document.querySelectorAll('[awt-explore-id]').forEach(el => el.removeAttribute('awt-explore-id'));
+      clearExploreIds();
     }
   }
 

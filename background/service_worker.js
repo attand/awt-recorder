@@ -323,15 +323,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  // Phase 4b: 探索开始 — 仅发送给当前激活 Tab 的顶层窗口，防止多 Frame 并发重复执行
+  // Phase 4b: 探索开始 — 向当前激活页面发送启动探索指令
   if (msg.type === 'EXPLORE_START') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs && tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, {
+    getActiveWebTab().then(tab => {
+      if (tab) {
+        chrome.tabs.sendMessage(tab.id, {
           type: 'BEGIN_EXPLORE',
           intent_text: msg.intent_text,
           max_steps: msg.max_steps || 10
-        }).catch(() => {});
+        }).catch(err => {
+          console.warn('[AWT SW] 发送 BEGIN_EXPLORE 异常:', err);
+        });
+      } else {
+        console.warn('[AWT SW] 未找到待测页面的活动 Tab');
       }
     });
     return false;
@@ -374,6 +378,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
+/**
+ * 健壮获取当前待测页面的活动 Tab (解决 Side Panel 焦点导致 currentWindow: true 查空问题)
+ */
+async function getActiveWebTab() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tabs && tabs.length > 0 && tabs[0].url && !tabs[0].url.startsWith('chrome-extension://')) {
+      return tabs[0];
+    }
+  } catch (e) {}
+
+  try {
+    const allActive = await chrome.tabs.query({ active: true });
+    if (allActive && allActive.length > 0) {
+      const webTab = allActive.find(t => t.url && !t.url.startsWith('chrome-extension://'));
+      if (webTab) return webTab;
+      return allActive[0];
+    }
+  } catch (e) {}
+
+  return null;
+}
+
 function getAdapterByName(name) {
   if (name === 'element-ui') return ElementUIAdapter;
   if (name === 'ant-design') return AntDesignAdapter;
@@ -386,27 +413,27 @@ async function broadcastRecordingState(start) {
 }
 
 async function broadcastToTabs(payload) {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  for (const tab of tabs) {
-    try {
-      chrome.tabs.sendMessage(tab.id, payload).catch(() => {});
-    } catch (e) {}
+  const tab = await getActiveWebTab();
+  if (!tab) return;
 
-    // 跨 Frame 深度分发广播
-    if (chrome.webNavigation && chrome.webNavigation.getAllFrames) {
-      try {
-        chrome.webNavigation.getAllFrames({ tabId: tab.id }, (frames) => {
-          if (chrome.runtime.lastError) return;
-          if (frames && Array.isArray(frames)) {
-            frames.forEach(f => {
-              if (f.frameId > 0) {
-                chrome.tabs.sendMessage(tab.id, payload, { frameId: f.frameId }).catch(() => {});
-              }
-            });
-          }
-        });
-      } catch (e) {}
-    }
+  try {
+    chrome.tabs.sendMessage(tab.id, payload).catch(() => {});
+  } catch (e) {}
+
+  // 跨 Frame 深度分发广播
+  if (chrome.webNavigation && chrome.webNavigation.getAllFrames) {
+    try {
+      chrome.webNavigation.getAllFrames({ tabId: tab.id }, (frames) => {
+        if (chrome.runtime.lastError || !frames) return;
+        if (Array.isArray(frames)) {
+          frames.forEach(f => {
+            if (f.frameId > 0) {
+              chrome.tabs.sendMessage(tab.id, payload, { frameId: f.frameId }).catch(() => {});
+            }
+          });
+        }
+      });
+    } catch (e) {}
   }
 }
 
@@ -486,14 +513,15 @@ async function handleSendToBridge(sendResponse) {
 
 // Phase 4a: 定位器健检 — 向 Content Script 发送验证请求并汇总结果
 async function handleHealthCheck(msg, sendResponse) {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tabs.length === 0) {
-    sendResponse({ results: [] });
+  const tab = await getActiveWebTab();
+  if (!tab) {
+    console.warn('[AWT SW] 健检未找到待测页面 Tab');
+    sendResponse({ results: (msg.steps || []).map(s => ({ index: s.index, locator: s.locator, intent: s.intent, status: 'not_found', dom_snippet: '' })) });
     return;
   }
 
-  const tabId = tabs[0].id;
-  const locators = msg.steps.map(s => ({
+  const tabId = tab.id;
+  const locators = (msg.steps || []).map(s => ({
     index: s.index,
     locator: s.locator,
     intent: s.intent
@@ -505,14 +533,17 @@ async function handleHealthCheck(msg, sendResponse) {
       locators: locators
     }, (response) => {
       if (chrome.runtime.lastError) {
-        console.warn('[AWT SW] 健检请求失败:', chrome.runtime.lastError.message);
-        sendResponse({ results: locators.map(l => ({ ...l, status: 'error', dom_snippet: '' })) });
-        return;
+        console.warn('[AWT SW] 健检请求通信异常:', chrome.runtime.lastError.message);
       }
-      sendResponse(response || { results: [] });
+      const results = response?.results || [];
+      if (results.length > 0) {
+        sendResponse({ results: results });
+      } else {
+        sendResponse({ results: locators.map(l => ({ ...l, status: 'not_found', dom_snippet: '' })) });
+      }
     });
   } catch (e) {
-    sendResponse({ results: [] });
+    sendResponse({ results: locators.map(l => ({ ...l, status: 'not_found', dom_snippet: '' })) });
   }
 }
 
@@ -528,4 +559,5 @@ function sendToBridge(payload) {
     console.warn('[AWT SW] Bridge 未连接，无法发送:', payload.type);
   }
 }
+
 
