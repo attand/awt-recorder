@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AWT 录制助手",
-  "version": "0.3.1",
-  "description": "AWT 自动化测试框架录制辅助插件 - 智能增强版 (支持动态多 Frame 追踪)",
+  "version": "0.4.0",
+  "description": "AWT 自动化测试框架录制辅助插件 - 智能增强版 (支持定位器健检与 AI 探索)",
   "permissions": [
     "activeTab",
     "scripting",
@@ -48,7 +48,8 @@
         "adapters/element_ui.js",
         "content/dom_utils.js",
         "content/highlight.js",
-        "content/recorder.js"
+        "content/recorder.js",
+        "content/health_checker.js"
       ],
       "all_frames": true,
       "match_about_blank": true,

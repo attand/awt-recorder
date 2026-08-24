@@ -228,3 +228,82 @@ body {
 .awt-toast--visible { opacity: 1; }
 
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.85; } 100% { opacity: 1; } }
+
+/* ===== Phase 4a: 定位器健检样式 ===== */
+.awt-health-section {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.awt-health-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.awt-health-file-info {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+.awt-health-results {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.awt-health-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.awt-health-item--ok { border-left: 3px solid #10b981; }
+.awt-health-item--fail { border-left: 3px solid #ef4444; background-color: #fef2f2; }
+.awt-health-item--healing { border-left: 3px solid #f59e0b; background-color: #fffbeb; }
+.awt-health-item__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.awt-health-item__intent { font-weight: 600; color: var(--text-main); }
+.awt-health-status {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.awt-health-status--ok { background: #dcfce7; color: #15803d; }
+.awt-health-status--fail { background: #fee2e2; color: #b91c1c; }
+.awt-health-status--healed { background: #fef3c7; color: #92400e; }
+.awt-health-item__locator {
+  font-family: monospace;
+  font-size: 10px;
+  color: #64748b;
+  word-break: break-all;
+}
+.awt-health-item__fix {
+  margin-top: 3px;
+  padding: 4px 6px;
+  background: #0f172a;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 10px;
+}
+.awt-health-item__fix-old { color: #f87171; text-decoration: line-through; }
+.awt-health-item__fix-new { color: #34d399; }
+.awt-health-actions { display: flex; gap: 6px; }
+.awt-health-summary {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 0;
+  text-align: center;
+}
+

@@ -41,6 +41,24 @@
         <button id="copy-clipboard-btn" class="awt-btn awt-btn--secondary" disabled>📋 复制 JSON</button>
         <button id="clear-btn" class="awt-btn awt-btn--secondary" disabled>🗑️</button>
       </div>
+      <div class="awt-control-row">
+        <button id="import-yaml-btn" class="awt-btn awt-btn--secondary" style="flex:1;">📂 导入脚本</button>
+        <button id="health-check-btn" class="awt-btn awt-btn--secondary" disabled style="flex:1;">🩺 健检</button>
+      </div>
+      <input type="file" id="yaml-file-input" accept=".yaml,.yml" style="display:none;">
+    </section>
+
+    <!-- Phase 4a: 定位器健检区 -->
+    <section id="health-check-section" class="awt-health-section" style="display: none;">
+      <div class="awt-health-header">
+        <h2 class="awt-section-title">🩺 定位器健检</h2>
+        <button id="health-close-btn" class="awt-icon-btn" title="关闭健检">✕</button>
+      </div>
+      <div id="health-file-info" class="awt-health-file-info"></div>
+      <div id="health-results" class="awt-health-results"></div>
+      <div id="health-actions" class="awt-health-actions" style="display: none;">
+        <button id="health-apply-btn" class="awt-btn awt-btn--success">✅ 采纳全部修复</button>
+      </div>
     </section>
 
     <!-- 步骤列表容器 -->

@@ -23,6 +23,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let currentSteps = [];
 
+  // Phase 4a: 健检相关元素
+  const importYamlBtn = document.getElementById('import-yaml-btn');
+  const healthCheckBtn = document.getElementById('health-check-btn');
+  const yamlFileInput = document.getElementById('yaml-file-input');
+  const healthSection = document.getElementById('health-check-section');
+  const healthCloseBtn = document.getElementById('health-close-btn');
+  const healthFileInfo = document.getElementById('health-file-info');
+  const healthResults = document.getElementById('health-results');
+  const healthActions = document.getElementById('health-actions');
+  const healthApplyBtn = document.getElementById('health-apply-btn');
+
+  let importedYamlSteps = [];  // 导入的 YAML 步骤（含 locator 的子集）
+  let importedYamlPath = '';   // 导入的 YAML 文件名（用于显示）
+  let healSuggestions = [];    // AI 修复建议 [{index, old_locator, new_locator}]
+
+
   function showToast(msg) {
     toastEl.textContent = msg;
     toastEl.className = 'awt-toast awt-toast--visible';
@@ -289,5 +305,263 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusMsg.textContent = msg.message;
       showToast(msg.success ? '🎉 YAML 转译完成！' : '⚠️ 转译遇到警告');
     }
+    // Phase 4a: 健检结果回调
+    else if (msg.type === 'HEAL_RESULT') {
+      handleHealResult(msg);
+    } else if (msg.type === 'APPLY_RESULT') {
+      if (msg.success) {
+        showToast('✅ 修复已写入 YAML 文件');
+        statusMsg.style.color = '#10b981';
+        statusMsg.textContent = '修复已成功写入 YAML';
+      } else {
+        showToast('❌ 写入失败: ' + (msg.message || ''));
+        statusMsg.style.color = '#ef4444';
+        statusMsg.textContent = '写入失败: ' + (msg.message || '');
+      }
+    }
   });
+
+  // ==================== Phase 4a: 定位器健检逻辑 ====================
+
+  importYamlBtn.addEventListener('click', () => {
+    yamlFileInput.click();
+  });
+
+  yamlFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseYamlSimple(text);
+      importedYamlPath = file.name;
+
+      // 提取所有含 locator 的步骤
+      importedYamlSteps = [];
+      if (parsed.steps && Array.isArray(parsed.steps)) {
+        parsed.steps.forEach((step, idx) => {
+          if (step.locator && typeof step.locator === 'string' && step.locator.trim()) {
+            importedYamlSteps.push({
+              index: idx,
+              action: step.action || '',
+              intent: step.intent || '',
+              locator: step.locator.trim(),
+              value: step.value || '',
+              key: step.key || ''
+            });
+          }
+        });
+      }
+
+      healthCheckBtn.disabled = importedYamlSteps.length === 0;
+      showToast(`📂 已导入 ${importedYamlSteps.length} 个可检测步骤`);
+      statusMsg.textContent = `已导入 ${file.name}（${importedYamlSteps.length} 个定位器）`;
+    } catch (err) {
+      showToast('❌ YAML 解析失败: ' + err.message);
+    }
+
+    // 重置 file input，允许再次选择相同文件
+    yamlFileInput.value = '';
+  });
+
+  healthCheckBtn.addEventListener('click', () => {
+    if (importedYamlSteps.length === 0) return;
+    healthCheckBtn.disabled = true;
+    statusMsg.textContent = '🩺 正在验证定位器...';
+    healSuggestions = [];
+
+    // 向 Service Worker 发送健检请求
+    chrome.runtime.sendMessage({
+      type: 'HEALTH_CHECK_REQUEST',
+      steps: importedYamlSteps,
+      yamlPath: importedYamlPath
+    }, (res) => {
+      healthCheckBtn.disabled = false;
+      if (res) {
+        renderHealthResults(res);
+      }
+    });
+  });
+
+  healthCloseBtn.addEventListener('click', () => {
+    healthSection.style.display = 'none';
+  });
+
+  healthApplyBtn.addEventListener('click', () => {
+    if (healSuggestions.length === 0) return;
+    healthApplyBtn.disabled = true;
+    statusMsg.textContent = '📝 正在写入修复...';
+
+    chrome.runtime.sendMessage({
+      type: 'APPLY_HEALS',
+      yamlPath: importedYamlPath,
+      repairs: healSuggestions.map(s => ({ old: s.old_locator, new: s.new_locator }))
+    });
+  });
+
+  function renderHealthResults(res) {
+    healthSection.style.display = '';
+    healthFileInfo.textContent = `脚本: ${importedYamlPath}`;
+    healthResults.innerHTML = '';
+    healthActions.style.display = 'none';
+
+    const items = res.results || [];
+    let okCount = 0;
+    let failCount = 0;
+
+    for (const item of items) {
+      const div = document.createElement('div');
+      const isOk = item.status === 'found';
+      if (isOk) okCount++; else failCount++;
+
+      div.className = `awt-health-item ${isOk ? 'awt-health-item--ok' : 'awt-health-item--fail'}`;
+      div.setAttribute('data-index', item.index);
+      div.innerHTML = `
+        <div class="awt-health-item__header">
+          <span class="awt-health-item__intent">#${item.index + 1} ${item.intent}</span>
+          <span class="awt-health-status ${isOk ? 'awt-health-status--ok' : 'awt-health-status--fail'}">${isOk ? '🟢 命中' : '🔴 失效'}</span>
+        </div>
+        <div class="awt-health-item__locator">${item.locator}</div>
+      `;
+      healthResults.appendChild(div);
+    }
+
+    // 摘要
+    const summary = document.createElement('div');
+    summary.className = 'awt-health-summary';
+    summary.textContent = `验证完成: 🟢 ${okCount} 命中 / 🔴 ${failCount} 失效`;
+    healthResults.prepend(summary);
+
+    statusMsg.textContent = `健检完成: ${okCount} 通过, ${failCount} 失效`;
+
+    // 如果有失效项，自动请求 AI 修复
+    if (failCount > 0) {
+      statusMsg.textContent = `${failCount} 个定位器失效，正在请求 AI 修复...`;
+      const failedItems = items
+        .filter(i => i.status === 'not_found')
+        .map(i => ({
+          locator: i.locator,
+          intent: i.intent,
+          dom_snippet: i.dom_snippet || ''
+        }));
+
+      chrome.runtime.sendMessage({
+        type: 'HEAL_REQUEST',
+        items: failedItems,
+        yamlPath: importedYamlPath
+      });
+    }
+  }
+
+  function handleHealResult(msg) {
+    const results = msg.results || [];
+    healSuggestions = [];
+
+    for (const r of results) {
+      if (r.new_locator && r.new_locator !== r.old_locator) {
+        healSuggestions.push(r);
+
+        // 在界面上更新对应的失效项，追加修复建议
+        const items = healthResults.querySelectorAll('.awt-health-item--fail');
+        for (const item of items) {
+          const locatorEl = item.querySelector('.awt-health-item__locator');
+          if (locatorEl && locatorEl.textContent === r.old_locator) {
+            item.className = 'awt-health-item awt-health-item--healing';
+            const statusEl = item.querySelector('.awt-health-status');
+            if (statusEl) {
+              statusEl.className = 'awt-health-status awt-health-status--healed';
+              statusEl.textContent = '🔧 已修复';
+            }
+            // 追加 diff 展示
+            const fixDiv = document.createElement('div');
+            fixDiv.className = 'awt-health-item__fix';
+            fixDiv.innerHTML = `
+              <div class="awt-health-item__fix-old">- ${r.old_locator}</div>
+              <div class="awt-health-item__fix-new">+ ${r.new_locator}</div>
+            `;
+            item.appendChild(fixDiv);
+            break;
+          }
+        }
+      }
+    }
+
+    if (healSuggestions.length > 0) {
+      healthActions.style.display = '';
+      statusMsg.textContent = `AI 给出 ${healSuggestions.length} 个修复建议，请审核后采纳`;
+      showToast(`🔧 AI 给出 ${healSuggestions.length} 个修复建议`);
+    } else {
+      statusMsg.textContent = 'AI 未能给出有效修复建议';
+      showToast('⚠️ AI 未能修复失效的定位器');
+    }
+  }
+
+  /**
+   * 极简 YAML 解析器（仅支持本框架的 YAML 脚本格式，不引入第三方库）
+   * 支持解析 name, description, steps 列表，每个 step 包含 action, intent, locator, value, key 等字段
+   */
+  function parseYamlSimple(yamlText) {
+    const result = { steps: [] };
+    const lines = yamlText.split('\n');
+    let currentStep = null;
+    let inSteps = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trimEnd();
+
+      // 跳过注释和空行
+      if (trimmed.trim().startsWith('#') || trimmed.trim() === '') continue;
+
+      // 顶层字段
+      if (!line.startsWith(' ') && !line.startsWith('\t')) {
+        if (trimmed.startsWith('name:')) {
+          result.name = extractYamlValue(trimmed.substring(5));
+        } else if (trimmed.startsWith('description:')) {
+          result.description = extractYamlValue(trimmed.substring(12));
+        } else if (trimmed.startsWith('steps:')) {
+          inSteps = true;
+        }
+        continue;
+      }
+
+      if (!inSteps) continue;
+
+      // 步骤列表项（以 "  - " 开头）
+      if (trimmed.match(/^\s+-\s+\w+:/)) {
+        if (currentStep) result.steps.push(currentStep);
+        currentStep = {};
+        // 解析同行的 key: value
+        const afterDash = trimmed.replace(/^\s+-\s+/, '');
+        const colonIdx = afterDash.indexOf(':');
+        if (colonIdx > 0) {
+          const key = afterDash.substring(0, colonIdx).trim();
+          const val = extractYamlValue(afterDash.substring(colonIdx + 1));
+          currentStep[key] = val;
+        }
+      } else if (currentStep && trimmed.match(/^\s+\w+:/)) {
+        // 步骤的后续属性行
+        const stripped = trimmed.trim();
+        const colonIdx = stripped.indexOf(':');
+        if (colonIdx > 0) {
+          const key = stripped.substring(0, colonIdx).trim();
+          const val = extractYamlValue(stripped.substring(colonIdx + 1));
+          currentStep[key] = val;
+        }
+      }
+    }
+
+    if (currentStep) result.steps.push(currentStep);
+    return result;
+  }
+
+  function extractYamlValue(raw) {
+    let val = raw.trim();
+    // 去除引号包裹
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    return val;
+  }
 });
+

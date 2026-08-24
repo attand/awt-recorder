@@ -99,6 +99,19 @@ async function initWebSocket() {
             yamlPath: msg.yamlPath
           });
         }
+        if (msg.type === 'HEAL_RESULT') {
+          notifySidePanel({
+            type: 'HEAL_RESULT',
+            results: msg.results
+          });
+        }
+        if (msg.type === 'APPLY_RESULT') {
+          notifySidePanel({
+            type: 'APPLY_RESULT',
+            success: msg.success,
+            message: msg.message
+          });
+        }
       } catch (e) {
         console.warn('[AWT SW] 解析 WS 消息异常:', e);
       }
@@ -265,6 +278,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // Phase 4a: 定位器健检 — 向当前 Tab 的 Content Script 发送验证请求
+  if (msg.type === 'HEALTH_CHECK_REQUEST') {
+    handleHealthCheck(msg, sendResponse);
+    return true;
+  }
+
+  // Phase 4a: AI 修复请求 — 转发到 Bridge
+  if (msg.type === 'HEAL_REQUEST') {
+    sendToBridge({
+      type: 'HEAL_REQUEST',
+      items: msg.items,
+      yamlPath: msg.yamlPath
+    });
+    return false;
+  }
+
+  // Phase 4a: 采纳修复 — 转发到 Bridge
+  if (msg.type === 'APPLY_HEALS') {
+    sendToBridge({
+      type: 'APPLY_HEALS',
+      yamlPath: msg.yamlPath,
+      repairs: msg.repairs
+    });
+    return false;
+  }
+
   return false;
 });
 
@@ -377,3 +416,49 @@ async function handleSendToBridge(sendResponse) {
     sendResponse({ success: false, message: `发送失败，请确认 Bridge 服务已启动: ${err.message}` });
   }
 }
+
+// Phase 4a: 定位器健检 — 向 Content Script 发送验证请求并汇总结果
+async function handleHealthCheck(msg, sendResponse) {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tabs.length === 0) {
+    sendResponse({ results: [] });
+    return;
+  }
+
+  const tabId = tabs[0].id;
+  const locators = msg.steps.map(s => ({
+    index: s.index,
+    locator: s.locator,
+    intent: s.intent
+  }));
+
+  try {
+    chrome.tabs.sendMessage(tabId, {
+      type: 'CHECK_LOCATORS',
+      locators: locators
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn('[AWT SW] 健检请求失败:', chrome.runtime.lastError.message);
+        sendResponse({ results: locators.map(l => ({ ...l, status: 'error', dom_snippet: '' })) });
+        return;
+      }
+      sendResponse(response || { results: [] });
+    });
+  } catch (e) {
+    sendResponse({ results: [] });
+  }
+}
+
+// Phase 4a: 通用 Bridge 发送（WebSocket 优先，无降级）
+function sendToBridge(payload) {
+  if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+    try {
+      wsClient.send(JSON.stringify(payload));
+    } catch (e) {
+      console.warn('[AWT SW] Bridge 发送失败:', e);
+    }
+  } else {
+    console.warn('[AWT SW] Bridge 未连接，无法发送:', payload.type);
+  }
+}
+
