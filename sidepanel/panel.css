@@ -307,3 +307,59 @@ body {
   text-align: center;
 }
 
+/* ===== Phase 4b: AI 探索样式 ===== */
+.awt-explore-section {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+}
+.awt-explore-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+.awt-collapse-icon {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+.awt-collapse-icon--open { transform: rotate(180deg); }
+.awt-explore-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.awt-explore-input-row { display: flex; gap: 6px; }
+.awt-explore-input {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  outline: none;
+}
+.awt-explore-input:focus { border-color: var(--primary-color); }
+.awt-explore-progress {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.awt-explore-step {
+  font-size: 10px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #f8fafc;
+  border-left: 3px solid var(--primary-color);
+}
+.awt-explore-step__think { color: var(--text-muted); font-style: italic; }
+.awt-explore-step__action { color: var(--text-main); font-weight: 600; }
+.awt-explore-step--done { border-left-color: var(--success-color); background: #f0fdf4; }
+.awt-explore-step--error { border-left-color: var(--danger-color); background: #fef2f2; }
+
+

@@ -38,6 +38,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   let importedYamlPath = '';   // 导入的 YAML 文件名（用于显示）
   let healSuggestions = [];    // AI 修复建议 [{index, old_locator, new_locator}]
 
+  // Phase 4b: AI 探索相关元素
+  const exploreToggleHeader = document.getElementById('explore-toggle-header');
+  const exploreBody = document.getElementById('explore-body');
+  const exploreCollapseIcon = document.getElementById('explore-collapse-icon');
+  const exploreIntentInput = document.getElementById('explore-intent-input');
+  const exploreStartBtn = document.getElementById('explore-start-btn');
+  const exploreStopBtn = document.getElementById('explore-stop-btn');
+  const exploreProgress = document.getElementById('explore-progress');
+
+  let isExploring = false;
+
 
   function showToast(msg) {
     toastEl.textContent = msg;
@@ -319,6 +330,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusMsg.textContent = '写入失败: ' + (msg.message || '');
       }
     }
+    // Phase 4b: 探索进度回调
+    else if (msg.type === 'EXPLORE_STEP_PROGRESS') {
+      renderExploreStep(msg);
+    } else if (msg.type === 'EXPLORE_COMPLETE') {
+      handleExploreComplete(msg);
+    }
   });
 
   // ==================== Phase 4a: 定位器健检逻辑 ====================
@@ -563,5 +580,75 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     return val;
   }
+
+  // ==================== Phase 4b: AI 探索逻辑 ====================
+
+  // 折叠/展开
+  exploreToggleHeader.addEventListener('click', () => {
+    const isHidden = exploreBody.style.display === 'none';
+    exploreBody.style.display = isHidden ? '' : 'none';
+    exploreCollapseIcon.className = isHidden ? 'awt-collapse-icon awt-collapse-icon--open' : 'awt-collapse-icon';
+  });
+
+  // 输入框启用按钮
+  exploreIntentInput.addEventListener('input', () => {
+    exploreStartBtn.disabled = !exploreIntentInput.value.trim() || isExploring;
+  });
+
+  // 开始探索
+  exploreStartBtn.addEventListener('click', () => {
+    const intent = exploreIntentInput.value.trim();
+    if (!intent) return;
+
+    isExploring = true;
+    exploreStartBtn.disabled = true;
+    exploreStopBtn.disabled = false;
+    exploreProgress.innerHTML = '';
+    statusMsg.textContent = '🤖 AI 正在探索: ' + intent;
+
+    chrome.runtime.sendMessage({
+      type: 'EXPLORE_START',
+      intent_text: intent,
+      max_steps: 10
+    });
+  });
+
+  // 停止探索
+  exploreStopBtn.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'EXPLORE_STOP' });
+    exploreStopBtn.disabled = true;
+    statusMsg.textContent = '正在停止探索...';
+  });
+
+  function renderExploreStep(msg) {
+    const div = document.createElement('div');
+    div.className = 'awt-explore-step';
+    div.innerHTML = `
+      <div class="awt-explore-step__action">Step ${msg.step_num}/${msg.max_steps}: ${msg.action} ${msg.ref || ''}</div>
+      <div class="awt-explore-step__think">${msg.think || ''}</div>
+    `;
+    exploreProgress.appendChild(div);
+    exploreProgress.scrollTop = exploreProgress.scrollHeight;
+  }
+
+  function handleExploreComplete(msg) {
+    isExploring = false;
+    exploreStartBtn.disabled = !exploreIntentInput.value.trim();
+    exploreStopBtn.disabled = true;
+
+    const div = document.createElement('div');
+    div.className = 'awt-explore-step ' + (msg.success ? 'awt-explore-step--done' : 'awt-explore-step--error');
+    div.innerHTML = `<div class="awt-explore-step__action">${msg.success ? '✅ 探索完成' : '⚠️ 探索结束'}: ${msg.reason || ''}</div>`;
+    exploreProgress.appendChild(div);
+
+    statusMsg.textContent = msg.success ? '🤖 AI 探索完成！步骤已追加到录制列表' : '探索结束: ' + (msg.reason || '');
+    if (msg.success) showToast('🤖 AI 探索完成！');
+
+    // 刷新步骤列表
+    chrome.runtime.sendMessage({ type: 'GET_STATUS' }, res => {
+      if (res) updateUI(res);
+    });
+  }
 });
+
 

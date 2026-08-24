@@ -61,6 +61,24 @@
       </div>
     </section>
 
+    <!-- Phase 4b: AI 探索区 -->
+    <section id="explore-section" class="awt-explore-section">
+      <div class="awt-explore-header" id="explore-toggle-header">
+        <span class="awt-section-title">🤖 AI 探索</span>
+        <span id="explore-collapse-icon" class="awt-collapse-icon">▼</span>
+      </div>
+      <div id="explore-body" class="awt-explore-body" style="display: none;">
+        <div class="awt-explore-input-row">
+          <input type="text" id="explore-intent-input" class="awt-explore-input" placeholder="输入操作意图，如：点击系统管理菜单" />
+        </div>
+        <div class="awt-explore-input-row">
+          <button id="explore-start-btn" class="awt-btn awt-btn--primary" style="flex:1;" disabled>▶ 开始探索</button>
+          <button id="explore-stop-btn" class="awt-btn awt-btn--secondary" style="flex:1;" disabled>⏹ 停止</button>
+        </div>
+        <div id="explore-progress" class="awt-explore-progress"></div>
+      </div>
+    </section>
+
     <!-- 步骤列表容器 -->
     <section class="awt-steps-section">
       <div class="awt-steps-header">

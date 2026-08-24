@@ -112,6 +112,16 @@ async function initWebSocket() {
             message: msg.message
           });
         }
+        if (msg.type === 'EXPLORE_LLM_RESPONSE') {
+          // 将 LLM 决策转发到 Content Script
+          broadcastToTabs({
+            type: 'EXPLORE_LLM_RESPONSE',
+            action: msg.action,
+            ref: msg.ref,
+            value: msg.value,
+            think: msg.think
+          });
+        }
       } catch (e) {
         console.warn('[AWT SW] 解析 WS 消息异常:', e);
       }
@@ -301,6 +311,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       yamlPath: msg.yamlPath,
       repairs: msg.repairs
     });
+    return false;
+  }
+
+  // Phase 4b: 探索开始 — 转发到 Content Script
+  if (msg.type === 'EXPLORE_START') {
+    broadcastToTabs({
+      type: 'BEGIN_EXPLORE',
+      intent_text: msg.intent_text,
+      max_steps: msg.max_steps || 10
+    });
+    return false;
+  }
+
+  // Phase 4b: 探索停止 — 转发到 Content Script
+  if (msg.type === 'EXPLORE_STOP') {
+    broadcastToTabs({ type: 'EXPLORE_STOP' });
+    return false;
+  }
+
+  // Phase 4b: 探索 LLM 请求 — 转发到 Bridge
+  if (msg.type === 'EXPLORE_LLM_REQUEST') {
+    sendToBridge({
+      type: 'EXPLORE_LLM_REQUEST',
+      intent_text: msg.intent_text,
+      dom_snapshot: msg.dom_snapshot,
+      history: msg.history
+    });
+    return false;
+  }
+
+  // Phase 4b: 探索进度和完成 — 从 Content Script 转发到 Side Panel
+  if (msg.type === 'EXPLORE_STEP_PROGRESS' || msg.type === 'EXPLORE_COMPLETE') {
+    notifySidePanel(msg);
     return false;
   }
 
