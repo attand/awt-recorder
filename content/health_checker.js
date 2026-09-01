@@ -9,7 +9,7 @@
     if (msg.type === 'CHECK_LOCATORS') {
       const results = checkLocators(msg.locators);
       sendResponse({ results: results });
-      return false;
+      return true;  // 保持异步响应通道开放（Chrome MV3 最佳实践）
     }
   });
 

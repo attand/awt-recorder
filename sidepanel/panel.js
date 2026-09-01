@@ -642,17 +642,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     const intent = exploreIntentInput.value.trim();
     if (!intent) return;
 
-    isExploring = true;
-    lastRenderedStepNum = -1;
-    exploreStartBtn.disabled = true;
-    exploreStopBtn.disabled = false;
-    exploreProgress.innerHTML = '';
-    statusMsg.textContent = '🤖 AI 正在探索: ' + intent;
+    // 前置检查 Bridge 连接状态，避免离线时静默超时
+    chrome.runtime.sendMessage({ type: 'GET_STATUS' }, (status) => {
+      if (!status || !status.bridgeConnected) {
+        showToast('⚠️ Bridge 未连接，请先启动 Bridge 服务');
+        statusMsg.style.color = '#ef4444';
+        statusMsg.textContent = '探索需要 Bridge 服务支持，请先启动 bridge_server.py';
+        return;
+      }
 
-    chrome.runtime.sendMessage({
-      type: 'EXPLORE_START',
-      intent_text: intent,
-      max_steps: 10
+      isExploring = true;
+      lastRenderedStepNum = -1;
+      exploreStartBtn.disabled = true;
+      exploreStopBtn.disabled = false;
+      exploreProgress.innerHTML = '';
+      statusMsg.style.color = '';
+      statusMsg.textContent = '🤖 AI 正在探索: ' + intent;
+
+      chrome.runtime.sendMessage({
+        type: 'EXPLORE_START',
+        intent_text: intent,
+        max_steps: 10
+      });
     });
   });
 

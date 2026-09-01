@@ -29,7 +29,7 @@ function getGlobalStatus() {
 
 // 初始化 SidePanel 点击行为
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[AWT SW] AWT Recorder v0.3.1 已安装');
+  console.log('[AWT SW] AWT Recorder v0.4.0 已安装');
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(err => {
       console.warn('[AWT SW] 设置 SidePanel 失败:', err);
