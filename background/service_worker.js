@@ -29,7 +29,7 @@ function getGlobalStatus() {
 
 // 初始化 SidePanel 点击行为
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[AWT SW] AWT Recorder v0.4.0 已安装');
+  console.log('[AWT SW] AWT Recorder v0.5.0 已安装');
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(err => {
       console.warn('[AWT SW] 设置 SidePanel 失败:', err);
@@ -130,6 +130,19 @@ async function initWebSocket() {
             componentName: msg.componentName,
             totalSteps: msg.totalSteps
           });
+        }
+        // Phase 5: 视觉探索 — 来自 Bridge 的消息直接转发到 Side Panel
+        if (msg.type === 'EXPLORE_VISUAL_PROGRESS') {
+          notifySidePanel(msg);
+        }
+        if (msg.type === 'EXPLORE_VISUAL_COMPLETE') {
+          notifySidePanel(msg);
+        }
+        if (msg.type === 'EXPLORE_VISUAL_ERROR') {
+          notifySidePanel(msg);
+        }
+        if (msg.type === 'EXPLORE_VISUAL_SOLIDIFIED') {
+          notifySidePanel(msg);
         }
       } catch (e) {
         console.warn('[AWT SW] 解析 WS 消息异常:', e);
@@ -372,6 +385,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         steps: msg.generatedSteps
       });
     }
+    return false;
+  }
+
+  // Phase 5: 视觉探索开始 — 转发到 Bridge（由 Bridge 启动 Node.js 子进程）
+  if (msg.type === 'EXPLORE_VISUAL_START') {
+    sendToBridge({
+      type: 'EXPLORE_VISUAL_START',
+      intent_text: msg.intent_text,
+      max_steps: msg.max_steps || 10
+    });
+    return false;
+  }
+
+  // Phase 5: 视觉探索停止
+  if (msg.type === 'EXPLORE_VISUAL_STOP') {
+    sendToBridge({ type: 'EXPLORE_VISUAL_STOP' });
     return false;
   }
 

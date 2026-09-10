@@ -1,6 +1,6 @@
 # AWT 录制助手 (AWT Recorder)
 
-专为 AWT 自动化测试框架量身打造的通用浏览器辅助录制插件。支持实时 DOM 语义提取、组件级定位器智能生成、Shadow DOM 隔离高亮探测、键盘按键监听、**定位器全量健检 (Healer)** 与 **前端 Agent 智能探索 (Explorer)** 及 LLM 智能转译。
+专为 AWT 自动化测试框架量身打造的通用浏览器辅助录制插件。支持实时 DOM 语义提取、组件级定位器智能生成、Shadow DOM 隔离高亮探测、键盘按键监听、**定位器全量健检 (Healer)** 与 **双模式 AI 智能探索 (DOM 文本探索 + Midscene 视觉探索)** 及 LLM 智能转译。
 
 ---
 
@@ -13,8 +13,9 @@
 | **隔离式页面高亮** | 基于 **Shadow DOM** 的高亮遮罩（蓝色悬停虚线框 + 绿色已录制序号实线框），`pointer-events: none` 零侵入原生排版与交互 | Phase 3 |
 | **键盘操作感知** | 自动捕获 `Tab`（焦点切换）、`Delete`（清空）、`Enter`（回车提交）、`Escape`、方向键等控制按键为 `press` 动作 | Phase 3 优化 |
 | **多 Frame 动态保活** | 监听 `webNavigation`，动态弹出的新 iframe / frame 自动激活录制，跨 frame 操作精准捕获 | Phase 3.1 |
-| **定位器健检 (Healer)** | 支持一键导入已有 YAML 测试脚本，在当前真实 DOM 批量验证定位器命中率，失效项自动唤起 AI Healer 并支持**一键采纳回写修复** | Phase 4a 🆕 |
-| **前端 Agent 探索 (Explorer)** | 自然语言意图驱动的前端自主 Agent，基于极简 DOM 快照与 LLM 决策在浏览器中自动执行操作并产出录制步骤 | Phase 4b 🆕 |
+| **定位器健检 (Healer)** | 支持一键导入已有 YAML 测试脚本，在当前真实 DOM 批量验证定位器命中率，失效项自动唤起 AI Healer 并支持**一键采纳回写修复** | Phase 4a |
+| **前端 Agent 探索 (Explorer)** | 自然语言意图驱动的前端自主 Agent，基于极简 DOM 快照与 LLM 决策在浏览器中自动执行操作并产出录制步骤 | Phase 4b |
+| **Midscene 视觉探索 (Visual Explorer)** | 集成 Midscene.js Bridge Mode，依托视觉多模态大模型与屏幕截图，突破 Canvas、图标按钮与无文本交互盲区，步骤自动固化为 YAML 组件 | Phase 5 🆕 |
 | **操作复合自动合并** | `ElementUIAdapter` / `AntDesignAdapter` 自动将下拉框的「展开 + 点击选项」合并为单一 `select_option` 复合操作 | Phase 2 |
 | **行内微调与参数化** | 步骤卡片支持**双击修改意图**（如改为“点击查询按钮”）与**双击参数占位符化**（如替换为 `${username}`） | Phase 3 |
 | **双向长连接通信** | 与本地 `bridge_server.py` 保持 WebSocket 长连接，具备 20s 心跳保活与指数退避自动重连，支持 HTTP 自动降级 | Phase 2 |
@@ -25,10 +26,12 @@
 
 ## 二、架构设计与技术栈约束
 
-1. **纯 Vanilla JS**：零 npm 依赖、零打包构建工具、无需 node_modules，所有代码原生手写。
+1. **纯 Vanilla JS 核心**：录制插件核心零打包构建工具、无需在浏览器端打包，轻量稳定。
 2. **MV3 规范**：严格遵循 Chrome Manifest V3，采用 Background Service Worker + Content Script + Side Panel 通信模型。
 3. **可插拔适配器模式**：所有组件特征与 DOM 语义提取均隔离在 `adapters/` 中，框架与适配器解耦。
-4. **前端 Agent 引擎**：`explorer_agent.js` 在 Content Script 内实现原生 DOM 快照生成与执行循环，与后端 `agent_core.py` 协同决策。
+4. **双探索引擎并存**：
+   - **文本模式 (Phase 4b)**：纯前端 DOM 快照 + LLM 文本决策，快速、轻量、低 Token 成本；
+   - **视觉模式 (Phase 5)**：通过 Bridge 调用 Node.js 端 `@midscene/web` (Bridge Mode) 连接 Chrome，屏幕截图 + 多模态大模型，感知力强，支持 Canvas、图标及复杂富交互。
 5. **安全合规**：密码输入框（`type="password"`）强制脱敏为 `"***"`，禁止向非 `127.0.0.1` 发送录制数据。
 
 ---
@@ -42,7 +45,7 @@
 2. 开启右上角的 **「开发者模式 (Developer Mode)」**。
 3. 点击 **「加载已解包的扩展程序 (Load unpacked)」**，选择目录：
    `C:\9Codes\awt\awt-recorder`
-4. 确认扩展列表中出现「AWT 录制助手 v0.4.0」。
+4. 确认扩展列表中出现「AWT 录制助手 v0.5.0」。
 
 ### 2. 启动本地 Bridge 服务
 在测试框架终端中运行：
@@ -69,14 +72,49 @@ python c:\9Codes\awt\ai_automation_framework\tools\bridge_server.py
    - 面板展示 diff 修复建议（如 `- #old-btn` / `+ #new-active-btn`）。
 4. 确认无误后点击 **「✅ 采纳全部修复」**，修复内容将直接持久化反写到原 YAML 文件！
 
-### 5. 前端 Agent 智能探索 (Explorer) 使用流程
-1. 点击展开 Side Panel 底部的 **「🤖 AI 探索」** 折叠区。
-2. 在输入框内输入自然语言意图（例如：`点击系统管理菜单，进入角色管理页面`）。
+### 5. AI 智能探索 (Explorer) 双模式使用流程
+
+点击展开 Side Panel 底部的 **「🤖 AI 探索」** 折叠区。
+
+#### 模式一：🔤 文本模式（默认，极速低成本）
+适用于常规 Web 页面，表单、按钮、文字链接齐全的场景。
+1. 在模式切换栏选中 **「🔤 文本模式」**（右侧提示：“快速 · 低成本 · DOM 感知”）；
+2. 输入自然语言操作意图（例如：`点击系统管理菜单，进入角色管理页面`）；
 3. 点击 **「▶ 开始探索」**：
-   - 前端 Agent 自动提取页面极简快照发给大模型进行自主决策。
-   - 浏览器自动执行点击与文本录入，面板实时流式打印每一步的思考过程与行动指令。
-   - 探索达成后，生成的步骤将自动追加到录制操作流列表中。
-4. 可随时点击 **「⏹ 停止」** 按钮随时中断探索。
+   - Content Script 实时截取极简 DOM 快照经 Bridge 发送给 LLM 决策；
+   - 自动在页面执行点击或录入，面板实时显示每一步思考与动作；
+   - 探索完成后，步骤追加到录制列表中，并自动固化为 YAML 组件；
+4. 点击 **「⏹ 停止」** 可随时中断探索。
+
+#### 模式二：👁️ 视觉模式（Phase 5 🆕，Midscene.js 视觉增强）
+适用于 **Canvas 绘图、SVG 无文字图标按钮、富文本编辑器、拖拽控件** 等纯 DOM 快照难以识别的复杂界面。
+
+**前置准备（首次使用）**：
+1. **安装 Node.js**（≥ 18，可在终端运行 `winget install OpenJS.NodeJS.LTS`）；
+2. **安装 Midscene 依赖**：
+   ```powershell
+   cd c:\9Codes\awt\ai_automation_framework\tools
+   npm install
+   ```
+3. **安装 Midscene 官方扩展**：在 Chrome Web Store 安装免费扩展 [Midscene](https://chromewebstore.google.com/detail/midscene/gbldofcpkknbggpkmbdaefngejllnief)；
+4. **配置视觉多模态大模型**（支持 GPT-4o、Qwen-VL、Doubao 等）：
+   - 可直接复用现有环境变量：`$env:OPENAI_API_KEY`、`$env:OPENAI_BASE_URL`；
+   - 或单独为 Midscene 指定配置：
+     ```powershell
+     $env:MIDSCENE_MODEL_NAME="qwen-vl-max"  # 或 doubao-seed, gpt-4o 等
+     $env:MIDSCENE_MODEL_API_KEY="sk-xxx"
+     $env:MIDSCENE_MODEL_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+     ```
+
+**使用流程**：
+1. 在探索区单选切换为 **「👁️ 视觉模式」**（右侧提示：“强感知 · 支持 Canvas/图标 · 需 Midscene 扩展”）；
+2. 输入探索意图（例如：`点击顶部导航栏中的放大镜图标，在弹出框中输入测试并回车`）；
+3. 点击 **「▶ 开始探索」**：
+   - Bridge 服务自动启动 Midscene Runner 子进程；
+   - Midscene 通过 Bridge 协议连接当前 Chrome 标签页，全屏截图并交由视觉模型感知分析；
+   - 实时流式回传 `👁️ Step N: ...` 与详细思考；
+   - 探索成功后自动调用 `create_skill` 固化生成 YAML 操作组件；
+4. 若系统未安装 Node.js 或未安装 npm 包，面板将显示清晰的错误排查指引，且不会影响任何其他功能。
 
 ---
 

@@ -68,6 +68,18 @@
         <span id="explore-collapse-icon" class="awt-collapse-icon">▼</span>
       </div>
       <div id="explore-body" class="awt-explore-body" style="display: none;">
+        <!-- Phase 5: 探索模式切换 -->
+        <div class="awt-explore-mode-switch">
+          <label class="awt-mode-label">
+            <input type="radio" name="explore-mode" value="text" id="explore-mode-text" checked>
+            <span>🔤 文本模式</span>
+          </label>
+          <label class="awt-mode-label">
+            <input type="radio" name="explore-mode" value="visual" id="explore-mode-visual">
+            <span>👁️ 视觉模式</span>
+          </label>
+          <span class="awt-mode-hint" id="explore-mode-hint">快速 · 低成本 · DOM 感知</span>
+        </div>
         <div class="awt-explore-input-row">
           <input type="text" id="explore-intent-input" class="awt-explore-input" placeholder="输入操作意图，如：点击系统管理菜单" />
         </div>

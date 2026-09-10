@@ -364,4 +364,34 @@ body {
 .awt-explore-step--done { border-left-color: var(--success-color); background: #f0fdf4; }
 .awt-explore-step--error { border-left-color: var(--danger-color); background: #fef2f2; }
 
-
+/* ---- Phase 5: 探索模式切换 ---- */
+.awt-explore-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 8px 0;
+}
+.awt-mode-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  transition: all .15s;
+  user-select: none;
+}
+.awt-mode-label:has(input:checked) {
+  background: #eff6ff;
+  border-color: var(--primary-color);
+  color: #1d4ed8;
+  font-weight: 600;
+}
+.awt-mode-label input[type="radio"] { display: none; }
+.awt-mode-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}

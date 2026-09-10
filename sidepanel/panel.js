@@ -50,6 +50,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   let isExploring = false;
   let lastRenderedStepNum = -1;
 
+  // Phase 5: 视觉探索相关
+  const exploreModeText = document.getElementById('explore-mode-text');
+  const exploreModeVisual = document.getElementById('explore-mode-visual');
+  const exploreModeHint = document.getElementById('explore-mode-hint');
+  let isVisualExploring = false;
+  let lastVisualStepNum = -1;
 
   function showToast(msg) {
     toastEl.textContent = msg;
@@ -340,6 +346,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       handleExploreComplete(msg);
     } else if (msg.type === 'EXPLORE_SOLIDIFIED') {
       handleExploreSolidified(msg);
+    }
+    // Phase 5: 视觉探索进度回调
+    else if (msg.type === 'EXPLORE_VISUAL_PROGRESS') {
+      renderVisualExploreStep(msg);
+    } else if (msg.type === 'EXPLORE_VISUAL_COMPLETE') {
+      handleVisualExploreComplete(msg);
+    } else if (msg.type === 'EXPLORE_VISUAL_ERROR') {
+      handleVisualExploreError(msg);
+    } else if (msg.type === 'EXPLORE_VISUAL_SOLIDIFIED') {
+      handleExploreSolidified(msg);  // 复用现有固化结果处理函数
     }
   });
 
@@ -659,11 +675,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusMsg.style.color = '';
       statusMsg.textContent = '🤖 AI 正在探索: ' + intent;
 
-      chrome.runtime.sendMessage({
-        type: 'EXPLORE_START',
-        intent_text: intent,
-        max_steps: 10
-      });
+      // Phase 5: 根据模式选择发送不同的消息类型
+      const isVisualMode = exploreModeVisual && exploreModeVisual.checked;
+      if (isVisualMode) {
+        isVisualExploring = true;
+        lastVisualStepNum = -1;
+        chrome.runtime.sendMessage({
+          type: 'EXPLORE_VISUAL_START',
+          intent_text: intent,
+          max_steps: 10
+        });
+      } else {
+        chrome.runtime.sendMessage({
+          type: 'EXPLORE_START',
+          intent_text: intent,
+          max_steps: 10
+        });
+      }
     });
   });
 
@@ -721,7 +749,78 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusMsg.textContent = `已固化为 YAML 组件: ${msg.componentName}`;
     }
   }
+
+  // ==================== Phase 5: 视觉探索函数 ====================
+
+  // 模式切换提示文本
+  if (exploreModeText) {
+    exploreModeText.addEventListener('change', () => {
+      if (exploreModeHint) exploreModeHint.textContent = '快速 · 低成本 · DOM 感知';
+    });
+  }
+  if (exploreModeVisual) {
+    exploreModeVisual.addEventListener('change', () => {
+      if (exploreModeHint) exploreModeHint.textContent = '强感知 · 支持 Canvas/图标 · 需 Midscene 扩展';
+    });
+  }
+
+  function renderVisualExploreStep(msg) {
+    // 防重: 同一 step_num 不重复渲染
+    if (typeof msg.step_num === 'number' && msg.step_num === lastVisualStepNum) {
+      return;
+    }
+    lastVisualStepNum = msg.step_num;
+
+    const div = document.createElement('div');
+    div.className = 'awt-explore-step';
+    div.innerHTML = `
+      <div class="awt-explore-step__action">👁️ Step ${msg.step_num}: ${msg.action || ''}</div>
+      <div class="awt-explore-step__think">${msg.think || ''}</div>
+    `;
+    exploreProgress.appendChild(div);
+    exploreProgress.scrollTop = exploreProgress.scrollHeight;
+  }
+
+  function handleVisualExploreComplete(msg) {
+    isExploring = false;
+    isVisualExploring = false;
+    exploreStartBtn.disabled = !exploreIntentInput.value.trim();
+    exploreStopBtn.disabled = true;
+
+    const div = document.createElement('div');
+    div.className = 'awt-explore-step ' + (msg.success ? 'awt-explore-step--done' : 'awt-explore-step--error');
+    div.innerHTML = `<div class="awt-explore-step__action">${msg.success ? '✅ 视觉探索完成' : '⚠️ 视觉探索结束'}: ${msg.reason || ''} (${msg.total_steps || 0} 步)</div>`;
+    exploreProgress.appendChild(div);
+
+    statusMsg.style.color = msg.success ? '#10b981' : '';
+    statusMsg.textContent = msg.success
+      ? `👁️ 视觉探索完成！共 ${msg.total_steps || 0} 步`
+      : '视觉探索结束: ' + (msg.reason || '');
+    if (msg.success) showToast('👁️ 视觉探索完成！');
+
+    // 刷新步骤列表
+    chrome.runtime.sendMessage({ type: 'GET_STATUS' }, res => {
+      if (res) updateUI(res);
+    });
+  }
+
+  function handleVisualExploreError(msg) {
+    isExploring = false;
+    isVisualExploring = false;
+    exploreStartBtn.disabled = !exploreIntentInput.value.trim();
+    exploreStopBtn.disabled = true;
+
+    const div = document.createElement('div');
+    div.className = 'awt-explore-step awt-explore-step--error';
+    div.innerHTML = `<div class="awt-explore-step__action">❌ 视觉探索异常: ${msg.message || ''}</div>`;
+    exploreProgress.appendChild(div);
+
+    statusMsg.style.color = '#ef4444';
+    statusMsg.textContent = '视觉探索异常: ' + (msg.message || '');
+    showToast('❌ ' + (msg.message || '视觉探索异常'));
+  }
 });
+
 
 
 
