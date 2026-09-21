@@ -57,6 +57,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   let isVisualExploring = false;
   let lastVisualStepNum = -1;
 
+  // Phase 6: 断言拾取相关
+  const assertPickBtn = document.getElementById('assert-pick-btn');
+  let isInAssertPickMode = false;
+
   function showToast(msg) {
     toastEl.textContent = msg;
     toastEl.className = 'awt-toast awt-toast--visible';
@@ -100,6 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div class="awt-step-btns">
             ${idx > 0 ? `<button class="awt-step-btn awt-step-btn--up" data-index="${idx}" title="上移">▲</button>` : ''}
             ${idx < currentSteps.length - 1 ? `<button class="awt-step-btn awt-step-btn--down" data-index="${idx}" title="下移">▼</button>` : ''}
+            <button class="awt-step-btn awt-step-btn--assert-insert" data-index="${idx}" title="在此步骤后插入断言">➕</button>
             <button class="awt-step-btn awt-step-btn--del" data-index="${idx}" title="删除">×</button>
           </div>
         </div>
@@ -108,6 +113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           ${label ? `<span class="awt-tag">🏷️ ${label}</span>` : ''}
           ${isIframe ? `<span class="awt-tag">🖼️ iframe</span>` : ''}
           ${step.value !== null && step.value !== undefined ? `<span class="awt-tag awt-val-tag" title="双击修改值">${action === 'press' ? '⌨️' : '✍️'} "${step.value}"</span>` : ''}
+          ${action === 'assert' && step.expected_text ? `<span class="awt-tag awt-assert-tag" title="双击修改期望值">✅ 期望: "${step.expected_text}"</span>` : ''}
         </div>
       `;
 
@@ -151,12 +157,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       }
 
+      // Phase 6: 期望值 (expected_text) 双击编辑
+      const assertTag = card.querySelector('.awt-assert-tag');
+      if (assertTag) {
+        assertTag.addEventListener('dblclick', () => {
+          const input = document.createElement('input');
+          input.className = 'awt-inline-input';
+          input.value = step.expected_text || '';
+          assertTag.replaceWith(input);
+          input.focus();
+          input.addEventListener('blur', () => {
+            const newExpected = input.value;
+            chrome.runtime.sendMessage({ type: 'UPDATE_STEP', index: idx, expected_text: newExpected }, res => {
+              if (res) updateUI(res);
+            });
+          });
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') input.blur();
+          });
+        });
+      }
+
       // 删除按钮
       card.querySelector('.awt-step-btn--del').addEventListener('click', () => {
         chrome.runtime.sendMessage({ type: 'DELETE_STEP', index: idx }, res => {
           if (res) updateUI(res);
         });
       });
+
+      // Phase 6: ➕ 插入断言按钮
+      const assertInsertBtn = card.querySelector('.awt-step-btn--assert-insert');
+      if (assertInsertBtn) {
+        assertInsertBtn.addEventListener('click', () => {
+          enterAssertPickMode(parseInt(assertInsertBtn.dataset.index) + 1);
+        });
+      }
 
       // 上移
       const upBtn = card.querySelector('.awt-step-btn--up');
@@ -224,6 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   toggleBtn.addEventListener('click', () => {
+    if (isInAssertPickMode) exitAssertPickMode(true);
     chrome.runtime.sendMessage({ type: 'TOGGLE_RECORDING' }, res => {
       if (res) updateUI(res);
     });
@@ -305,6 +341,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   chrome.runtime.onMessage.addListener(msg => {
     if (msg.type === 'STATUS_UPDATE') {
       updateUI(msg);
+      // Phase 6: 断言拾取插入成功后自动退出拾取模式
+      if (isInAssertPickMode) exitAssertPickMode();
     } else if (msg.type === 'STEP_ADDED' || msg.type === 'STEP_REPLACED') {
       chrome.runtime.sendMessage({ type: 'GET_STATUS' }, res => {
         if (res) updateUI(res);
@@ -794,9 +832,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     statusMsg.style.color = msg.success ? '#10b981' : '';
     statusMsg.textContent = msg.success
-      ? `👁️ 视觉探索完成！共 ${msg.total_steps || 0} 步`
+      ? `👁️ 视觉探索完成！共 ${msg.total_steps || 0} 步已追加到录制列表`
       : '视觉探索结束: ' + (msg.reason || '');
-    if (msg.success) showToast('👁️ 视觉探索完成！');
+    if (msg.success) showToast('👁️ 视觉探索完成！步骤已追加到录制列表');
 
     // 刷新步骤列表
     chrome.runtime.sendMessage({ type: 'GET_STATUS' }, res => {
@@ -818,6 +856,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     statusMsg.style.color = '#ef4444';
     statusMsg.textContent = '视觉探索异常: ' + (msg.message || '');
     showToast('❌ ' + (msg.message || '视觉探索异常'));
+  }
+
+  // ====== Phase 6: 断言拾取模式管理 ======
+
+  function enterAssertPickMode(insertIndex) {
+    isInAssertPickMode = true;
+    if (assertPickBtn) assertPickBtn.classList.add('active');
+    statusMsg.textContent = '🎯 请在页面上点击需要断言的文本元素...';
+    statusMsg.style.color = '#8b5cf6';
+    chrome.runtime.sendMessage({ type: 'START_ASSERT_PICK', insertIndex: insertIndex });
+  }
+
+  function exitAssertPickMode(notifyBackground = false) {
+    isInAssertPickMode = false;
+    if (assertPickBtn) assertPickBtn.classList.remove('active');
+    if (statusMsg.textContent.includes('🎯')) {
+      statusMsg.textContent = '';
+      statusMsg.style.color = '';
+    }
+    if (notifyBackground) {
+      chrome.runtime.sendMessage({ type: 'CANCEL_ASSERT_PICK' });
+    }
+  }
+
+  // 全局 🎯 断言按钮 — 追加到末尾
+  if (assertPickBtn) {
+    assertPickBtn.addEventListener('click', () => {
+      if (isInAssertPickMode) {
+        exitAssertPickMode(true);
+      } else {
+        enterAssertPickMode(currentSteps.length);
+      }
+    });
   }
 });
 

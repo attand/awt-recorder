@@ -51,6 +51,7 @@ class AWTHighlighter {
           padding: 1px 5px;
           border-radius: 3px;
           white-space: nowrap;
+          pointer-events: none !important;
         }
         .awt-badge--green {
           background-color: #10b981;
@@ -113,6 +114,40 @@ class AWTHighlighter {
       this.recordedContainer.appendChild(box);
       this.recordedBoxes.set(stepNum, box);
     } catch (e) {}
+  }
+
+  // Phase 6: 断言拾取高亮（紫色边框）
+  highlightAssertHover(targetEl, locatorText = '') {
+    if (!targetEl || !this.hoverBox) return;
+    try {
+      const rect = targetEl.getBoundingClientRect();
+      const scrollX = window.scrollX || window.pageXOffset;
+      const scrollY = window.scrollY || window.pageYOffset;
+
+      this.hoverBox.style.width = `${rect.width}px`;
+      this.hoverBox.style.height = `${rect.height}px`;
+      this.hoverBox.style.top = `${rect.top + scrollY}px`;
+      this.hoverBox.style.left = `${rect.left + scrollX}px`;
+      this.hoverBox.style.border = '2px dashed #8b5cf6';
+      this.hoverBox.style.background = 'rgba(139, 92, 246, 0.1)';
+      this.hoverBox.style.display = 'block';
+
+      const previewText = (targetEl.innerText || '').trim().slice(0, 40);
+      this.hoverBadge.textContent = '🎯 断言: ' + (previewText || locatorText.slice(0, 35));
+      this.hoverBadge.style.background = '#8b5cf6';
+      this.hoverBadge.style.display = 'block';
+    } catch (e) {}
+  }
+
+  // Phase 6: 重置高亮样式到默认蓝色
+  resetHoverStyle() {
+    if (this.hoverBox) {
+      this.hoverBox.style.border = '2px dashed #2563eb';
+      this.hoverBox.style.background = 'rgba(37, 99, 235, 0.08)';
+    }
+    if (this.hoverBadge) {
+      this.hoverBadge.style.background = '#2563eb';
+    }
   }
 
   clearAll() {

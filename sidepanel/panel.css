@@ -395,3 +395,44 @@ body {
   color: var(--text-muted);
   margin-left: auto;
 }
+
+/* ====== Phase 6: 断言样式 ====== */
+
+/* 断言动作标签 - 紫色 */
+.awt-step-action--assert {
+  background: #8b5cf6 !important;
+  color: #fff !important;
+}
+
+/* 期望值标签 */
+.awt-assert-tag {
+  background: #f3f0ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+  cursor: pointer;
+}
+.awt-assert-tag:hover {
+  background: #ede9fe;
+}
+
+/* 插入断言按钮 — 悬停显现 */
+.awt-step-btn--assert-insert {
+  font-size: 11px;
+  opacity: 0.25;
+  transition: opacity 0.15s;
+}
+.awt-step-card:hover .awt-step-btn--assert-insert {
+  opacity: 1;
+}
+
+/* 🎯 按钮激活态 */
+#assert-pick-btn.active {
+  background: #8b5cf6;
+  color: #fff;
+  border-color: #8b5cf6;
+  animation: awt-assert-pulse 1.5s ease-in-out infinite;
+}
+@keyframes awt-assert-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(139, 92, 246, 0); }
+}

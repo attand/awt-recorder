@@ -10,6 +10,10 @@
   let pendingInputEvent = null;
   let hoverThrottleTimer = null;
 
+  // Phase 6: 断言拾取模式状态
+  let isAssertPicking = false;
+  let assertInsertIndex = -1;
+
   const TRACKED_KEYS = new Set([
     'Tab',
     'Enter',
@@ -57,12 +61,15 @@
     if (msg.type === 'START_RECORDING') {
       isRecording = true;
       localSeq = 0;
+      // 开启录制时无条件重置断言拾取状态，确保正常录制
+      exitAssertPick();
       if (window.__AWT_HIGHLIGHTER) window.__AWT_HIGHLIGHTER.clearAll();
       attachListeners();
       sendResponse({ status: 'recording_started' });
     } else if (msg.type === 'STOP_RECORDING') {
       flushPendingInput();
       isRecording = false;
+      exitAssertPick();
       if (window.__AWT_HIGHLIGHTER) window.__AWT_HIGHLIGHTER.clearHover();
       detachListeners();
       sendResponse({ status: 'recording_stopped' });
@@ -72,9 +79,78 @@
     } else if (msg.type === 'CONFIG_UPDATED') {
       window.__AWT_CONFIG = msg.config;
       sendResponse({ status: 'config_synced' });
+    } else if (msg.type === 'START_ASSERT_PICK') {
+      // Phase 6: 进入断言拾取模式
+      isAssertPicking = true;
+      assertInsertIndex = msg.insertIndex ?? -1;
+      document.body.style.cursor = 'crosshair';
+      // 确保高亮可用（即使未在录制状态）
+      attachListeners();
+      sendResponse({ success: true });
+    } else if (msg.type === 'CANCEL_ASSERT_PICK') {
+      // Phase 6: 取消断言拾取
+      exitAssertPick();
+      sendResponse({ success: true });
     }
     return true;
   });
+
+  // Phase 6: 退出断言拾取模式
+  function exitAssertPick() {
+    isAssertPicking = false;
+    assertInsertIndex = -1;
+    document.body.style.cursor = '';
+    if (window.__AWT_HIGHLIGHTER && typeof window.__AWT_HIGHLIGHTER.resetHoverStyle === 'function') {
+      window.__AWT_HIGHLIGHTER.resetHoverStyle();
+    }
+    if (window.__AWT_HIGHLIGHTER) window.__AWT_HIGHLIGHTER.clearHover();
+    // 若不在录制状态则移除监听
+    if (!isRecording) detachListeners();
+  }
+
+  // Phase 6: 断言拾取处理
+  function handleAssertPick(targetEl) {
+    const rawText = targetEl.innerText || targetEl.textContent || '';
+    const expectedText = rawText.trim().replace(/\s+/g, ' ').slice(0, 200);
+    const locatorInfo = (typeof generateSmartLocator === 'function')
+      ? generateSmartLocator(targetEl)
+      : { primary: targetEl.tagName.toLowerCase(), alternatives: [] };
+    const isIframe = window.self !== window.top;
+
+    const intentPreview = expectedText.slice(0, 30) + (expectedText.length > 30 ? '...' : '');
+
+    const payload = {
+      type: 'INSERT_ASSERT_STEP',
+      insertIndex: assertInsertIndex,
+      data: {
+        seq: 0,
+        timestamp: Date.now(),
+        action: 'assert',
+        intent: '验证文本「' + intentPreview + '」',
+        value: null,
+        expected_text: expectedText,
+        url: window.location.href,
+        locator: locatorInfo.primary,
+        locatorAlternatives: locatorInfo.alternatives,
+        isInIframe: isIframe,
+        frameInfo: { isIframe, name: window.name || '', url: window.location.href },
+        element: {
+          tagName: targetEl.tagName.toUpperCase(),
+          text: expectedText,
+          value: targetEl.value !== undefined ? targetEl.value : null,
+          testId: (typeof getElementTestId === 'function') ? getElementTestId(targetEl) : { self: null, closest: null },
+          attributes: (typeof getElementAttributes === 'function') ? getElementAttributes(targetEl) : {}
+        },
+        context: (typeof extractFullContext === 'function') ? extractFullContext(targetEl) : {}
+      }
+    };
+
+    try {
+      chrome.runtime.sendMessage(payload).catch(() => {});
+    } catch (e) {}
+
+    exitAssertPick();
+  }
 
   function attachListeners() {
     window.removeEventListener('click', handleClick, true);
@@ -107,7 +183,7 @@
   }
 
   function handleMouseOver(e) {
-    if (!isRecording || window.__AWT_IS_EXPLORING) return;
+    if ((!isRecording && !isAssertPicking) || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
 
@@ -116,37 +192,41 @@
         hoverThrottleTimer = null;
         const locatorInfo = generateSmartLocator(target);
         if (window.__AWT_HIGHLIGHTER) {
-          window.__AWT_HIGHLIGHTER.highlightHover(target, locatorInfo.primary);
-        }
-        sendEvent({
-          type: 'ELEMENT_HOVER',
-          data: {
-            tagName: target.tagName,
-            text: (target.innerText || '').trim().slice(0, 50),
-            primaryLocator: locatorInfo.primary,
-            alternatives: locatorInfo.alternatives,
-            isInIframe: window.self !== window.top
+          // Phase 6: 断言拾取模式使用紫色高亮
+          if (isAssertPicking && typeof window.__AWT_HIGHLIGHTER.highlightAssertHover === 'function') {
+            window.__AWT_HIGHLIGHTER.highlightAssertHover(target, locatorInfo.primary);
+          } else {
+            window.__AWT_HIGHLIGHTER.highlightHover(target, locatorInfo.primary);
           }
-        });
+        }
+        // 拾取模式下不发送 ELEMENT_HOVER 事件
+        if (!isAssertPicking) {
+          sendEvent({
+            type: 'ELEMENT_HOVER',
+            data: {
+              tagName: target.tagName,
+              text: (target.innerText || '').trim().slice(0, 50),
+              primaryLocator: locatorInfo.primary,
+              alternatives: locatorInfo.alternatives,
+              isInIframe: window.self !== window.top
+            }
+          });
+        }
       }, 50); // 50ms 节流
     }
   }
 
-  function buildEventPayload(action, targetEl, value = null) {
+  function buildEventPayload(action, targetEl, cleanValue) {
+    localSeq++;
     const rawText = targetEl.innerText || targetEl.textContent || '';
     const cleanText = rawText.trim().replace(/\s+/g, ' ').slice(0, 100);
 
-    let cleanValue = value;
-    const attrType = (targetEl.getAttribute('type') || '').toLowerCase();
-    if (attrType === 'password') {
-      cleanValue = '***';
-    } else if (typeof cleanValue === 'string' && cleanValue.length > 500) {
-      cleanValue = cleanValue.slice(0, 500);
-    }
+    const config = window.__AWT_CONFIG?.recording || {};
+    const isPassword = targetEl.type === 'password';
+    const safeValue = isPassword ? '***' : cleanValue;
 
-    localSeq++;
     const locatorInfo = generateSmartLocator(targetEl);
-    const isIframe = window.self !== window.top;
+    const isIframe = window.self !== window.top || targetEl.ownerDocument !== document;
 
     // 录制元素高亮记录
     if (window.__AWT_HIGHLIGHTER) {
@@ -155,13 +235,12 @@
 
     let defaultIntent = '';
     if (action === 'click') {
-      defaultIntent = `点击${cleanText ? '「' + cleanText + '」' : targetEl.tagName}`;
+      defaultIntent = cleanText ? '点击「' + cleanText.slice(0, 20) + '」' : '点击 ' + targetEl.tagName.toLowerCase();
     } else if (action === 'fill') {
-      defaultIntent = `填写${cleanText ? '「' + cleanText + '」' : targetEl.tagName}`;
+      const label = extractFullContext(targetEl)?.formLabel?.text;
+      defaultIntent = label ? '填写 ' + label : '输入文本';
     } else if (action === 'press') {
-      defaultIntent = `按下键盘「${cleanValue}」${cleanText ? '（于 ' + cleanText + '）' : ''}`;
-    } else {
-      defaultIntent = `${action} ${cleanText || targetEl.tagName}`;
+      defaultIntent = '按下 ' + cleanValue;
     }
 
     return {
@@ -171,7 +250,7 @@
         timestamp: Date.now(),
         action: action,
         intent: defaultIntent,
-        value: cleanValue,
+        value: safeValue,
         url: window.location.href,
         locator: locatorInfo.primary,
         locatorAlternatives: locatorInfo.alternatives,
@@ -194,6 +273,14 @@
   }
 
   function handleClick(e) {
+    // Phase 6: 断言拾取模式拦截 — 必须在最前面
+    if (isAssertPicking) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      handleAssertPick(e.target);
+      return;
+    }
+
     if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
@@ -245,6 +332,17 @@
   }
 
   function handleKeyDown(e) {
+    // Phase 6: 在断言拾取模式下按 Escape 随时取消拾取
+    if (isAssertPicking && e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      exitAssertPick();
+      try {
+        chrome.runtime.sendMessage({ type: 'CANCEL_ASSERT_PICK' }).catch(() => {});
+      } catch (err) {}
+      return;
+    }
+
     if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;

@@ -136,6 +136,27 @@ async function initWebSocket() {
           notifySidePanel(msg);
         }
         if (msg.type === 'EXPLORE_VISUAL_COMPLETE') {
+          // Phase 5 增强: 将视觉探索步骤追加到主录制列表
+          if (msg.success && msg.steps && msg.steps.length > 0) {
+            for (const step of msg.steps) {
+              globalStepSeq++;
+              recordedSteps.push({
+                globalSeq: globalStepSeq,
+                timestamp: Date.now(),
+                action: step.action || 'ai_visual_act',
+                intent: '【视觉探索】' + (step.intent || '操作步骤'),
+                value: step.value || null,
+                locator: step.locator || '',
+                locatorAlternatives: [],
+                isInIframe: false,
+                url: '',
+                element: { tagName: 'VISUAL', text: step.intent || '' },
+                context: { detectedFramework: 'visual-explore' }
+              });
+            }
+            notifyUIState();
+            console.log(`[AWT SW] 👁️ 已将 ${msg.steps.length} 个视觉探索步骤追加到录制列表`);
+          }
           notifySidePanel(msg);
         }
         if (msg.type === 'EXPLORE_VISUAL_ERROR') {
@@ -256,10 +277,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'UPDATE_STEP') {
-    const { index, intent, value } = msg;
+    const { index, intent, value, expected_text } = msg;
     if (index >= 0 && index < recordedSteps.length) {
       if (intent !== undefined) recordedSteps[index].intent = intent;
       if (value !== undefined) recordedSteps[index].value = value;
+      if (expected_text !== undefined) recordedSteps[index].expected_text = expected_text;
       notifyUIState();
       sendResponse({ success: true, ...getGlobalStatus() });
     }
@@ -287,6 +309,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       notifyUIState();
       sendResponse({ success: true, ...getGlobalStatus() });
     }
+    return true;
+  }
+
+  // Phase 6: 插入断言步骤
+  if (msg.type === 'INSERT_ASSERT_STEP') {
+    const stepData = msg.data;
+    globalStepSeq++;
+    stepData.globalSeq = globalStepSeq;
+    const isFrame = (typeof sender.frameId === 'number' && sender.frameId > 0) || stepData.isInIframe;
+    stepData.isInIframe = isFrame;
+    stepData.frameId = sender.frameId || 0;
+
+    const idx = msg.insertIndex;
+    if (idx >= 0 && idx <= recordedSteps.length) {
+      recordedSteps.splice(idx, 0, stepData);
+    } else {
+      recordedSteps.push(stepData);
+    }
+    recordedSteps.forEach((s, i) => s.globalSeq = i + 1);
+    globalStepSeq = recordedSteps.length;
+    // 关键：插入断言后通知所有 Frame 全局退出断言拾取模式，恢复正常录制
+    broadcastToTabs({ type: 'CANCEL_ASSERT_PICK' });
+    notifyUIState();
+    sendResponse({ success: true, ...getGlobalStatus() });
+    return true;
+  }
+
+  // Phase 6: 断言拾取模式 — 广播给当前 Tab 的所有 Frame（含顶层与子 iframe）
+  if (msg.type === 'START_ASSERT_PICK' || msg.type === 'CANCEL_ASSERT_PICK') {
+    broadcastToTabs({
+      type: msg.type,
+      insertIndex: msg.insertIndex
+    });
+    sendResponse({ success: true });
     return true;
   }
 

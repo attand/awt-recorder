@@ -1,0 +1,8 @@
+﻿ M README.md
+ M background/service_worker.js
+ M content/highlight.js
+ M content/recorder.js
+ M sidepanel/panel.css
+ M sidepanel/panel.html
+ M sidepanel/panel.js
+?? git_status_tmp.txt
