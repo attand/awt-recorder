@@ -18,12 +18,17 @@ let reconnectTimer = null;
 let reconnectDelay = 1000;
 let heartbeatInterval = null;
 
+// Phase 5: 视觉探索伴随 DOM 捕获
+let isVisualCapturing = false;
+let visualCapturedDomEvents = [];
+
 function getGlobalStatus() {
   return {
     isRecording: isRecording,
     stepCount: recordedSteps.length,
     steps: recordedSteps,
-    bridgeConnected: isWsConnected
+    bridgeConnected: isWsConnected,
+    isVisualCapturing: isVisualCapturing
   };
 }
 
@@ -136,30 +141,66 @@ async function initWebSocket() {
           notifySidePanel(msg);
         }
         if (msg.type === 'EXPLORE_VISUAL_COMPLETE') {
-          // Phase 5 增强: 将视觉探索步骤追加到主录制列表
+          isVisualCapturing = false;
+          broadcastToTabs({ type: 'STOP_VISUAL_CAPTURE' });
+
+          // Phase 5 增强: 将视觉探索步骤追加到主录制列表，并与现场捕获的真实 DOM 事件进行时序融合
           if (msg.success && msg.steps && msg.steps.length > 0) {
+            const capturedList = [...visualCapturedDomEvents];
+            visualCapturedDomEvents = []; // 消费后重置
+
+            let domIdx = 0;
             for (const step of msg.steps) {
               globalStepSeq++;
-              recordedSteps.push({
+
+              // 智能对齐：在剩余 capturedList 中寻找动作类型匹配的现场 DOM 事件
+              let matchedDom = null;
+              if (domIdx < capturedList.length) {
+                const targetAction = (step.action || 'click').toLowerCase();
+                let foundOffset = -1;
+                for (let k = domIdx; k < capturedList.length; k++) {
+                  const cAct = (capturedList[k].action || '').toLowerCase();
+                  if ((targetAction === 'click' && cAct === 'click') ||
+                      (targetAction === 'input' && (cAct === 'fill' || cAct === 'input')) ||
+                      (targetAction === 'press' && cAct === 'press') ||
+                      (targetAction === cAct)) {
+                    foundOffset = k;
+                    break;
+                  }
+                }
+                if (foundOffset !== -1) {
+                  matchedDom = capturedList[foundOffset];
+                  capturedList.splice(foundOffset, 1);
+                } else {
+                  matchedDom = capturedList[domIdx];
+                  domIdx++;
+                }
+              }
+
+              const fusedStep = {
                 globalSeq: globalStepSeq,
-                timestamp: Date.now(),
-                action: step.action || 'ai_visual_act',
-                intent: '【视觉探索】' + (step.intent || '操作步骤'),
-                value: step.value || null,
-                locator: step.locator || '',
-                locatorAlternatives: [],
-                isInIframe: false,
-                url: '',
-                element: { tagName: 'VISUAL', text: step.intent || '' },
-                context: { detectedFramework: 'visual-explore' }
-              });
+                timestamp: matchedDom?.timestamp || Date.now(),
+                action: step.action || matchedDom?.action || 'click',
+                intent: '【视觉探索】' + (step.intent || matchedDom?.intent || '操作步骤'),
+                value: (step.value !== null && step.value !== undefined && step.value !== '') ? step.value : (matchedDom?.value || null),
+                locator: matchedDom?.locator || step.locator || '',
+                locatorAlternatives: matchedDom?.locatorAlternatives || [],
+                isInIframe: matchedDom?.isInIframe || false,
+                url: matchedDom?.url || '',
+                element: matchedDom?.element || { tagName: 'VISUAL', text: step.intent || '' },
+                context: matchedDom?.context || { detectedFramework: 'visual-explore', domSnippet: '' }
+              };
+
+              recordedSteps.push(fusedStep);
             }
             notifyUIState();
-            console.log(`[AWT SW] 👁️ 已将 ${msg.steps.length} 个视觉探索步骤追加到录制列表`);
+            console.log(`[AWT SW] 👁️ 已将 ${msg.steps.length} 个融合现场 DOM 的视觉探索步骤追加到录制列表`);
           }
           notifySidePanel(msg);
         }
         if (msg.type === 'EXPLORE_VISUAL_ERROR') {
+          isVisualCapturing = false;
+          broadcastToTabs({ type: 'STOP_VISUAL_CAPTURE' });
           notifySidePanel(msg);
         }
         if (msg.type === 'EXPLORE_VISUAL_SOLIDIFIED') {
@@ -348,6 +389,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'CLEAR_STEPS') {
     recordedSteps = [];
+    visualCapturedDomEvents = [];
     globalStepSeq = 0;
     broadcastToTabs({ type: 'CLEAR_HIGHLIGHTS' });
     notifyUIState();
@@ -412,7 +454,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Phase 4b: 探索停止 — 转发到 Content Script
   if (msg.type === 'EXPLORE_STOP') {
+    isVisualCapturing = false;
     broadcastToTabs({ type: 'EXPLORE_STOP' });
+    broadcastToTabs({ type: 'STOP_VISUAL_CAPTURE' });
     return false;
   }
 
@@ -444,8 +488,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
-  // Phase 5: 视觉探索开始 — 转发到 Bridge（由 Bridge 启动 Node.js 子进程）
+  // Phase 5: 视觉探索开始 — 开启页面伴随捕获并转发到 Bridge
   if (msg.type === 'EXPLORE_VISUAL_START') {
+    isVisualCapturing = true;
+    visualCapturedDomEvents = [];
+    broadcastToTabs({ type: 'START_VISUAL_CAPTURE' });
     sendToBridge({
       type: 'EXPLORE_VISUAL_START',
       intent_text: msg.intent_text,
@@ -456,7 +503,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Phase 5: 视觉探索停止
   if (msg.type === 'EXPLORE_VISUAL_STOP') {
+    isVisualCapturing = false;
+    broadcastToTabs({ type: 'STOP_VISUAL_CAPTURE' });
     sendToBridge({ type: 'EXPLORE_VISUAL_STOP' });
+    return false;
+  }
+
+  // Phase 5: 页面现场 DOM 伴随捕获事件暂存
+  if (msg.type === 'VISUAL_DOM_CAPTURED') {
+    if (msg.data) {
+      visualCapturedDomEvents.push(msg.data);
+      console.log(`[AWT SW] 👁️ 捕获到现场 DOM 动作: ${msg.data.action} -> ${msg.data.locator || ''}`);
+    }
     return false;
   }
 

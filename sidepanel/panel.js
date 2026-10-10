@@ -736,6 +736,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 停止探索
   exploreStopBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'EXPLORE_STOP' });
+    if (isVisualExploring) {
+      chrome.runtime.sendMessage({ type: 'EXPLORE_VISUAL_STOP' });
+    }
     exploreStopBtn.disabled = true;
     statusMsg.textContent = '正在停止探索...';
   });

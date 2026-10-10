@@ -10,6 +10,10 @@
   let pendingInputEvent = null;
   let hoverThrottleTimer = null;
 
+  // Phase 5: 视觉探索伴随 DOM 捕获状态
+  let isVisualCapturing = false;
+  let visualInputDebounceTimer = null;
+
   // Phase 6: 断言拾取模式状态
   let isAssertPicking = false;
   let assertInsertIndex = -1;
@@ -46,6 +50,9 @@
           if (res && res.isRecording) {
             isRecording = true;
             attachListeners();
+          } else if (res && res.isVisualCapturing) {
+            isVisualCapturing = true;
+            attachListeners();
           }
         });
       }
@@ -71,8 +78,21 @@
       isRecording = false;
       exitAssertPick();
       if (window.__AWT_HIGHLIGHTER) window.__AWT_HIGHLIGHTER.clearHover();
-      detachListeners();
+      if (!isVisualCapturing) detachListeners();
       sendResponse({ status: 'recording_stopped' });
+    } else if (msg.type === 'START_VISUAL_CAPTURE') {
+      // Phase 5: 启动视觉探索伴随 DOM 捕获
+      isVisualCapturing = true;
+      localSeq = 0;
+      attachListeners();
+      sendResponse({ status: 'visual_capture_started' });
+    } else if (msg.type === 'STOP_VISUAL_CAPTURE') {
+      // Phase 5: 停止视觉探索伴随 DOM 捕获
+      isVisualCapturing = false;
+      if (!isRecording && !isAssertPicking) {
+        detachListeners();
+      }
+      sendResponse({ status: 'visual_capture_stopped' });
     } else if (msg.type === 'CLEAR_HIGHLIGHTS') {
       if (window.__AWT_HIGHLIGHTER) window.__AWT_HIGHLIGHTER.clearAll();
       sendResponse({ status: 'cleared' });
@@ -104,8 +124,8 @@
       window.__AWT_HIGHLIGHTER.resetHoverStyle();
     }
     if (window.__AWT_HIGHLIGHTER) window.__AWT_HIGHLIGHTER.clearHover();
-    // 若不在录制状态则移除监听
-    if (!isRecording) detachListeners();
+    // 若不在录制或视觉捕获状态则移除监听
+    if (!isRecording && !isVisualCapturing) detachListeners();
   }
 
   // Phase 6: 断言拾取处理
@@ -228,8 +248,8 @@
     const locatorInfo = generateSmartLocator(targetEl);
     const isIframe = window.self !== window.top || targetEl.ownerDocument !== document;
 
-    // 录制元素高亮记录
-    if (window.__AWT_HIGHLIGHTER) {
+    // 录制元素高亮记录 (视觉探索伴随捕获时不绘制高亮框，防止干扰视觉识别)
+    if (window.__AWT_HIGHLIGHTER && !isVisualCapturing) {
       window.__AWT_HIGHLIGHTER.addRecordedElement(targetEl, localSeq);
     }
 
@@ -281,6 +301,29 @@
       return;
     }
 
+    // Phase 5: 视觉探索伴随 DOM 捕获
+    if (isVisualCapturing && !isRecording && !window.__AWT_IS_EXPLORING) {
+      const target = e.target;
+      if (shouldIgnore(target)) return;
+
+      const tag = target.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') {
+        const type = (target.getAttribute('type') || '').toLowerCase();
+        if (type !== 'button' && type !== 'submit' && type !== 'checkbox' && type !== 'radio') {
+          return;
+        }
+      }
+
+      const payload = buildEventPayload('click', target, null);
+      try {
+        chrome.runtime.sendMessage({
+          type: 'VISUAL_DOM_CAPTURED',
+          data: payload.data
+        }).catch(() => {});
+      } catch (err) {}
+      return;
+    }
+
     if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
@@ -300,6 +343,24 @@
   }
 
   function handleInput(e) {
+    // Phase 5: 视觉探索伴随 DOM 捕获
+    if (isVisualCapturing && !isRecording && !window.__AWT_IS_EXPLORING) {
+      const target = e.target;
+      if (shouldIgnore(target)) return;
+
+      clearTimeout(visualInputDebounceTimer);
+      visualInputDebounceTimer = setTimeout(() => {
+        const payload = buildEventPayload('fill', target, target.value);
+        try {
+          chrome.runtime.sendMessage({
+            type: 'VISUAL_DOM_CAPTURED',
+            data: payload.data
+          }).catch(() => {});
+        } catch (err) {}
+      }, 300);
+      return;
+    }
+
     if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
@@ -319,6 +380,24 @@
   }
 
   function handleChange(e) {
+    // Phase 5: 视觉探索伴随 DOM 捕获
+    if (isVisualCapturing && !isRecording && !window.__AWT_IS_EXPLORING) {
+      const target = e.target;
+      if (shouldIgnore(target)) return;
+
+      const tag = target.tagName.toLowerCase();
+      if (tag === 'select') {
+        const payload = buildEventPayload('fill', target, target.value);
+        try {
+          chrome.runtime.sendMessage({
+            type: 'VISUAL_DOM_CAPTURED',
+            data: payload.data
+          }).catch(() => {});
+        } catch (err) {}
+      }
+      return;
+    }
+
     if (!isRecording || window.__AWT_IS_EXPLORING) return;
     const target = e.target;
     if (shouldIgnore(target)) return;
@@ -340,6 +419,40 @@
       try {
         chrome.runtime.sendMessage({ type: 'CANCEL_ASSERT_PICK' }).catch(() => {});
       } catch (err) {}
+      return;
+    }
+
+    // Phase 5: 视觉探索伴随 DOM 捕获
+    if (isVisualCapturing && !isRecording && !window.__AWT_IS_EXPLORING) {
+      const target = e.target;
+      if (shouldIgnore(target)) return;
+
+      let keyName = e.key;
+      let shouldRecord = false;
+
+      if (TRACKED_KEYS.has(keyName)) {
+        if (keyName === 'Backspace') {
+          const tag = target.tagName.toLowerCase();
+          if (tag !== 'input' && tag !== 'textarea') {
+            shouldRecord = true;
+          }
+        } else {
+          shouldRecord = true;
+        }
+      } else if (e.ctrlKey && ['a', 'c', 'v', 'x', 'z', 'A', 'C', 'V', 'X', 'Z'].includes(keyName)) {
+        keyName = `Control+${keyName.toLowerCase()}`;
+        shouldRecord = true;
+      }
+
+      if (shouldRecord) {
+        const payload = buildEventPayload('press', target, keyName);
+        try {
+          chrome.runtime.sendMessage({
+            type: 'VISUAL_DOM_CAPTURED',
+            data: payload.data
+          }).catch(() => {});
+        } catch (err) {}
+      }
       return;
     }
 
