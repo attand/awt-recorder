@@ -14,7 +14,7 @@ const DEFAULT_PRESETS = {
     uiFramework: 'element-ui',
     recording: {
       testIdAttribute: 'data-testid',
-      testIdPrefix: 'vue',
+      testIdPrefix: '',
       domSnippetDepth: 3,
       domSnippetMaxLength: 2000,
       inputDebounceMs: 300,
